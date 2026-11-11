@@ -1,0 +1,1093 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>English Coach</title>
+<style>
+  :root {
+    --bg: #faf8ff; --panel: #ffffff; --ink: #2b2543; --muted: #7a7398;
+    --line: #ece6fa; --side: #f1ecfc; --side-ink: #514879; --side-hover: #e7dffb;
+    --accent: #8b6fd4; --accent-ink: #ffffff; --accent-soft: #f3eefd; --accent-line: #dccdf7;
+    --me: #7c62c8; --ok: #3a8f6b; --bad: #cc5555;
+    --shadow: 0 1px 2px rgba(74,48,138,.05), 0 6px 18px rgba(74,48,138,.06);
+    --shadow-lg: 0 2px 6px rgba(74,48,138,.07), 0 16px 44px rgba(74,48,138,.11);
+    --r: 14px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #131120; --panel: #1c1930; --ink: #ebe7f7; --muted: #a098bd;
+      --line: #2d2747; --side: #181528; --side-ink: #bdb3da; --side-hover: #251f3c;
+      --accent: #a98ee8; --accent-ink: #1b1530; --accent-soft: #272040; --accent-line: #413663;
+      --me: #6b53b0; --ok: #5cbf95; --bad: #e87a7a;
+      --shadow: 0 1px 2px rgba(0,0,0,.3); --shadow-lg: 0 16px 44px rgba(0,0,0,.45);
+    }
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; margin: 0; }
+  body { background: var(--bg); color: var(--ink); display: flex;
+         font: 15.5px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif;
+         -webkit-font-smoothing: antialiased; }
+  h2 { font-size: 21px; margin: 0 0 4px; letter-spacing: -.012em; }
+  h3 { font-size: 16px; margin: 0 0 8px; letter-spacing: -.008em; }
+  p { margin: 0 0 10px; }
+  .muted { color: var(--muted); }
+  .small { font-size: 13px; }
+
+  /* Sidebar */
+  nav { width: 220px; flex: none; background: var(--side); border-right: 1px solid var(--line);
+        display: flex; flex-direction: column; padding: 20px 12px; gap: 2px; color: var(--side-ink); }
+  nav .brand { color: var(--ink); font-weight: 700; font-size: 17px; padding: 0 12px 18px;
+               letter-spacing: -.015em; }
+  nav .brand small { display: block; font-weight: 450; font-size: 12px; color: var(--muted);
+                     letter-spacing: 0; margin-top: 2px; }
+  nav button { all: unset; cursor: pointer; padding: 9px 12px; border-radius: 10px; font-weight: 500;
+               display: flex; justify-content: space-between; align-items: center; transition: background .12s; }
+  nav button:hover { background: var(--side-hover); }
+  nav button.on { background: var(--panel); color: var(--accent); font-weight: 600; box-shadow: var(--shadow); }
+  nav button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .badge { background: var(--accent-soft); color: var(--accent); border: 1px solid var(--accent-line);
+           border-radius: 20px; font-size: 11.5px; font-weight: 600; padding: 0 7px; min-width: 22px; text-align: center; }
+  nav button.on .badge { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  nav .foot { margin-top: auto; font-size: 12px; color: var(--muted); padding: 0 12px; }
+
+  /* Main */
+  main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .topbar { position: sticky; top: 0; z-index: 5; padding: 16px 32px;
+            background: color-mix(in srgb, var(--bg) 85%, transparent);
+            backdrop-filter: blur(10px); border-bottom: 1px solid var(--line);
+            display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+  .topbar h1 { font-size: 23px; margin: 0; letter-spacing: -.022em; }
+  .topbar .sub { color: var(--muted); font-size: 13.5px; }
+  #scroll { flex: 1; overflow-y: auto; }
+  .view { display: none; padding: 22px 32px 48px; }
+  .view.on { display: block; }
+
+  /* Common */
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r);
+          padding: 18px 20px; box-shadow: var(--shadow); }
+  .btn { font: inherit; font-weight: 500; cursor: pointer; border-radius: 10px; padding: 8px 15px;
+         border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+         transition: border-color .12s, background .12s, box-shadow .12s; }
+  .btn:hover:not(:disabled) { border-color: var(--accent-line); background: var(--accent-soft); }
+  .btn:disabled { opacity: .45; cursor: default; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink);
+                 box-shadow: 0 1px 3px rgba(74,48,138,.22); }
+  .btn.primary:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 88%, black);
+                                      border-color: transparent; }
+  .btn.link { border: 0; background: none; color: var(--accent); padding: 4px 6px; box-shadow: none; }
+  .btn.link:hover { background: none; text-decoration: underline; }
+  .btn.danger:hover:not(:disabled) { border-color: var(--bad); color: var(--bad); background: transparent; }
+  .btn.sm { padding: 5px 11px; font-size: 13.5px; }
+  input[type=text], textarea, select {
+    font: inherit; color: var(--ink); background: var(--panel); border: 1px solid var(--line);
+    border-radius: 10px; padding: 9px 12px; width: 100%; transition: border-color .12s, box-shadow .12s; }
+  textarea { resize: vertical; min-height: 100px; }
+  select { width: auto; max-width: 100%; }
+  input:focus, textarea:focus, select:focus {
+    outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  label, .label-text { display: block; font-size: 13px; color: var(--muted); margin: 12px 0 5px; font-weight: 500; }
+  /* Власна кнопка вибору файлів: рідну браузер підписує своєю мовою */
+  .vh { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+        overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+  .filebtn { display: inline-block; width: auto; margin: 0; color: var(--ink); font-size: 15.5px; }
+  .vh:focus-visible + .row .filebtn { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .grow { flex: 1; min-width: 160px; }
+  .chip { background: var(--accent-soft); color: var(--ink); border-radius: 20px; font-size: 12px;
+          font-weight: 500; padding: 3px 10px; white-space: nowrap; }
+  .chip.lvl { background: var(--accent); color: var(--accent-ink); }
+  .error { color: var(--bad); margin-top: 10px; }
+  .empty { text-align: center; color: var(--muted); padding: 48px 10px; }
+  .stack { display: flex; flex-direction: column; gap: 14px; }
+
+  /* Segmented switches */
+  .seg { display: inline-flex; flex-wrap: wrap; gap: 5px; }
+  .seg button { font: inherit; font-weight: 500; cursor: pointer; padding: 6px 13px; border-radius: 20px;
+                border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+                transition: border-color .12s, background .12s; }
+  .seg button:hover:not(:disabled):not(.on) { border-color: var(--accent-line); background: var(--accent-soft); }
+  .seg button.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .seg button:disabled { opacity: .3; cursor: default; }
+  .seg small { opacity: .7; margin-left: 5px; font-weight: 400; }
+  .alpha button { min-width: 34px; text-align: center; padding: 5px 8px; }
+
+  /* Vocabulary */
+  .words { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+           gap: 12px; align-items: start; }
+  .word { padding: 0; overflow: hidden; transition: box-shadow .15s; }
+  .word[open] { grid-column: 1 / -1; box-shadow: var(--shadow-lg); border-color: var(--accent-line); }
+  .word > summary { list-style: none; cursor: pointer; padding: 14px 18px;
+                    display: flex; align-items: center; gap: 8px; }
+  .word > summary::-webkit-details-marker { display: none; }
+  .word > summary:hover { background: var(--accent-soft); }
+  /* Слово займає весь рядок, кнопка вимови — скраю: так клік будь-де розкриває картку */
+  .word > summary .term { flex: 1; }
+  .word > summary .speak { flex: none; }
+  .word[open] > summary { background: var(--accent-soft); border-bottom: 1px solid var(--line); }
+  .word .body { padding: 18px 20px 20px; display: grid; gap: 20px;
+                grid-template-columns: minmax(240px, 360px) 1fr; align-items: start; }
+  .word .meta, .word .ex { min-width: 0; }
+  @media (max-width: 900px) { .word .body { grid-template-columns: 1fr; gap: 14px; } }
+  .term { font-size: 17.5px; font-weight: 650; letter-spacing: -.01em; }
+  .ipa { color: var(--muted); font-size: 14px; }
+  .pos { color: var(--accent); font-size: 12.5px; font-weight: 600; }
+  .translation { font-size: 17px; font-weight: 600; margin-top: 8px; }
+  .flash { animation: flash 1.4s ease-out; }
+  @keyframes flash { 0%, 40% { box-shadow: 0 0 0 3px var(--accent); } 100% { box-shadow: var(--shadow-lg); } }
+  @media (prefers-reduced-motion: reduce) { .flash { animation: none; } }
+
+  /* Word family */
+  .family { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .fam { font: inherit; font-size: 13.5px; cursor: pointer; display: inline-flex; align-items: baseline; gap: 6px;
+         background: var(--panel); border: 1px solid var(--accent-line); color: var(--ink);
+         border-radius: 20px; padding: 4px 12px; transition: background .12s, border-color .12s; }
+  .fam:hover:not(:disabled) { background: var(--accent-soft); border-color: var(--accent); }
+  .fam:disabled { opacity: .6; cursor: default; }
+  .fam .pos { font-size: 11.5px; }
+  .fam .go { color: var(--accent); font-weight: 700; }
+  .label { display: block; font-size: 11.5px; letter-spacing: .07em; text-transform: uppercase;
+           color: var(--muted); font-weight: 600; margin-bottom: 6px; }
+
+  .examples { margin: 0; padding: 0; list-style: none; text-align: left; }
+  .examples li { padding: 9px 0; border-top: 1px solid var(--line); }
+  .examples li:first-child { border-top: 0; padding-top: 0; }
+  .examples .uk { color: var(--muted); font-size: 14px; margin-top: 2px; }
+  .speak { all: unset; cursor: pointer; font-size: 14px; padding: 0 4px; opacity: .55; transition: opacity .12s; }
+  .speak:hover { opacity: 1; }
+  .speak:focus-visible { outline: 2px solid var(--accent); border-radius: 4px; opacity: 1; }
+
+  /* Materials grouped by level */
+  #materials-list { display: flex; flex-direction: column; gap: 10px; }
+  .group { border: 1px solid var(--line); border-radius: var(--r); background: var(--panel);
+           box-shadow: var(--shadow); overflow: hidden; }
+  .group > summary { list-style: none; cursor: pointer; padding: 14px 18px;
+                     display: flex; align-items: center; gap: 10px; font-weight: 600; }
+  .group > summary::-webkit-details-marker { display: none; }
+  .group > summary::after { content: '▾'; margin-left: auto; color: var(--muted);
+                            font-size: 13px; transition: transform .15s; }
+  .group:not([open]) > summary::after { transform: rotate(-90deg); }
+  .group > summary:hover { background: var(--accent-soft); }
+  .group[open] > summary { background: var(--accent-soft); border-bottom: 1px solid var(--line); }
+  .group .gname { font-weight: 600; }
+  .group .gbody { padding: 16px 18px 18px; display: flex; flex-direction: column; gap: 18px; }
+  .subgroup .label { margin-bottom: 8px; }
+  .subgroup .card { box-shadow: none; }
+
+  /* Own examples and lesson notes */
+  .chip.mine { background: var(--accent); color: var(--accent-ink); font-size: 11px; }
+  .own-form { margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--line); }
+  .own-form input { font-size: 14.5px; padding: 7px 10px; }
+  .notes textarea { min-height: 72px; }
+
+  /* Category manager */
+  .cat-row { display: grid; grid-template-columns: 1fr auto auto; gap: 10px;
+             align-items: center; padding: 7px 0; border-top: 1px solid var(--line); }
+  .cat-row:first-child { border-top: 0; }
+
+  /* Lesson */
+  h3.part { font-size: 19px; margin: 28px 0 12px; letter-spacing: -.015em; }
+  h3.sec { color: var(--accent); font-size: 17px; }
+  .chip.tense { background: var(--panel); color: var(--muted); border: 1px solid var(--line); }
+  .mark.ok { color: var(--ok); font-weight: 600; }
+  .mark.bad { color: var(--bad); font-weight: 600; }
+  .ex-wrong .en { text-decoration: line-through; color: var(--bad); }
+  .note { padding: 12px 16px; border-radius: 12px; font-size: 14.5px;
+          background: var(--accent-soft); border: 1px solid var(--accent-line); color: var(--ink); }
+  .note b { display: block; font-size: 11.5px; letter-spacing: .07em; text-transform: uppercase;
+            color: var(--accent); font-weight: 700; margin-bottom: 5px; }
+  .table-wrap { overflow-x: auto; margin: 8px 0 12px; border: 1px solid var(--line); border-radius: 10px; }
+  table { border-collapse: collapse; width: 100%; font-size: 14.5px; }
+  th, td { border-bottom: 1px solid var(--line); padding: 8px 12px; text-align: left; vertical-align: top; }
+  tr:last-child td { border-bottom: 0; }
+  th { background: var(--accent-soft); font-weight: 600; }
+  .questions { margin: 0; padding-left: 22px; }
+  .questions > li { padding: 10px 0; border-top: 1px solid var(--line); }
+  .questions .row { margin: 8px 0 4px; }
+  .questions input[type=text] { max-width: 340px; }
+  .btn.opt { padding: 6px 13px; border-radius: 20px; }
+  .btn.opt.right { border-color: var(--ok); color: var(--ok); font-weight: 600; }
+  .btn.opt.wrong { border-color: var(--bad); color: var(--bad); }
+  .key { margin: 8px 0 0; padding-left: 22px; color: var(--muted); font-size: 14.5px; columns: 2; }
+
+  /* Chat */
+  #chat-list { display: flex; flex-direction: column; gap: 16px; min-height: 240px; margin-bottom: 16px; }
+  .msg { max-width: 760px; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .bubble { padding: 11px 16px; border-radius: 16px; }
+  .msg.coach { align-self: flex-start; }
+  .msg.coach .bubble { background: var(--panel); border: 1px solid var(--line);
+                       border-bottom-left-radius: 5px; box-shadow: var(--shadow); }
+  .msg.me { align-self: flex-end; }
+  .msg.me .bubble { background: var(--me); color: #fff; border-bottom-right-radius: 5px; }
+  .msg .note { margin-top: 8px; }
+  .typing { align-self: center; color: var(--muted); font-size: 14px; }
+  #chat-form { position: sticky; bottom: 0; background: var(--bg); padding: 12px 0 0; }
+  #chat-input { min-height: 44px; max-height: 160px; resize: none; }
+  #chat-mic.rec { background: var(--bad); border-color: var(--bad); color: #fff; animation: pulse 1.2s infinite; }
+  @keyframes pulse { 50% { opacity: .55; } }
+  @media (prefers-reduced-motion: reduce) { #chat-mic.rec { animation: none; } }
+
+  /* Review and quiz */
+  .stage { max-width: 640px; margin: 0 auto; text-align: center; }
+  .stage .card { padding: 34px 28px; }
+  .stage .term { font-size: 32px; }
+  .answer { text-align: left; margin-top: 20px; border-top: 1px solid var(--line); padding-top: 16px; }
+  .grades { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 20px; }
+  .options { display: grid; gap: 9px; margin-top: 20px; }
+  .options .btn { text-align: left; padding: 12px 16px; border-radius: 12px; }
+  .options .right { border-color: var(--ok); color: var(--ok); font-weight: 600; opacity: 1; }
+  .options .wrong { border-color: var(--bad); color: var(--bad); opacity: 1; }
+  .progress { height: 6px; background: var(--line); border-radius: 3px; margin-bottom: 18px; overflow: hidden; }
+  .progress i { display: block; height: 100%; background: var(--accent); transition: width .2s; }
+
+  @media (max-width: 760px) {
+    body { flex-direction: column; }
+    nav { width: auto; flex-direction: row; overflow-x: auto; padding: 8px; border-right: 0;
+          border-bottom: 1px solid var(--line); }
+    nav .brand, nav .foot { display: none; }
+    nav button { white-space: nowrap; gap: 6px; }
+    .topbar, .view { padding-left: 16px; padding-right: 16px; }
+    .grades { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media print {
+    nav, .topbar, .no-print, .speak, #materials-home { display: none !important; }
+    body, main, #scroll { display: block; overflow: visible; height: auto; background: #fff; color: #000; }
+    .view { padding: 0; }
+    .card { border-color: #bbb; box-shadow: none; break-inside: avoid; }
+    .key[hidden] { display: block !important; }
+    .key::before { content: 'Answer key'; display: block; font-weight: 600; column-span: all; }
+  }
+</style>
+</head>
+<body>
+<nav id="nav">
+  <div class="brand">English Coach<small>for developers</small></div>
+  <button data-view="upload">Upload</button>
+  <button data-view="materials">Materials <span class="badge" id="n-materials" hidden></span></button>
+  <button data-view="words">Vocabulary <span class="badge" id="n-words" hidden></span></button>
+  <button data-view="review">Review <span class="badge" id="n-due" hidden></span></button>
+  <button data-view="quiz">Quiz</button>
+  <button data-view="chat">Coach</button>
+  <div class="foot">Everything is stored locally in the data folder</div>
+</nav>
+
+<main>
+  <header class="topbar"><h1 id="view-title">Vocabulary</h1><span class="sub" id="view-sub"></span></header>
+  <div id="scroll">
+
+  <!-- Upload -->
+  <section class="view" id="upload">
+    <form class="card" id="material-form">
+      <label for="m-text">Text or phrases</label>
+      <textarea id="m-text" placeholder="LGTM, but could you rebase onto main and squash the fixup commits?"></textarea>
+      <span class="label-text">Files: images (JPG, PNG, WebP, GIF), PDF or text files. Up to 8 files, 10 MB in total</span>
+      <input type="file" id="m-file" class="vh" multiple aria-label="Choose files"
+             accept="image/jpeg,image/png,image/webp,image/gif,application/pdf,.txt,.md,.srt,.vtt,.csv,.json,text/*">
+      <div class="row">
+        <label for="m-file" class="btn filebtn">Choose files</label>
+        <span class="muted small" id="m-count">No files selected</span>
+      </div>
+      <div class="row small" id="m-files" style="margin-top:10px"></div>
+      <div class="row" style="margin-top:16px">
+        <button class="btn primary" id="m-submit" type="submit">Create lesson</button>
+        <span class="muted small" id="m-status"></span>
+      </div>
+      <div class="error" id="m-error" hidden></div>
+    </form>
+    <div class="card" id="m-result" hidden style="margin-top:16px"></div>
+  </section>
+
+  <!-- Materials -->
+  <section class="view" id="materials">
+    <div id="materials-home">
+      <div class="row" style="margin-bottom:16px">
+        <input class="grow" type="text" id="mf-search" placeholder="Search by title…" aria-label="Search lessons">
+        <div class="seg" id="mf-level" role="group" aria-label="Level"></div>
+      </div>
+      <div class="stack" id="materials-list"></div>
+    </div>
+    <div id="lesson" hidden></div>
+  </section>
+
+  <!-- Vocabulary -->
+  <section class="view" id="words">
+    <form class="card row" id="word-form">
+      <input class="grow" type="text" id="w-term" placeholder="New word or phrase, for example: edge case" aria-label="New word or phrase">
+      <button class="btn primary" id="w-submit" type="submit">Add card</button>
+      <span class="muted small" id="w-note"></span>
+      <div class="error" id="w-error" style="flex-basis:100%;margin:0" hidden></div>
+    </form>
+
+    <div class="row" style="margin:16px 0 12px">
+      <input class="grow" type="text" id="f-search" placeholder="Search…" aria-label="Search vocabulary">
+      <select id="f-category" aria-label="Category"></select>
+      <select id="f-level" aria-label="Level"></select>
+      <button class="btn" id="cat-toggle" type="button">Categories</button>
+    </div>
+
+    <div class="card" id="cat-panel" hidden style="margin-bottom:16px">
+      <h3>Manage categories</h3>
+      <p class="muted small">Renaming updates every card. Deleting moves its cards to “Other”.</p>
+      <div id="cat-list"></div>
+      <form class="row" id="cat-add" style="margin-top:14px">
+        <input class="grow" type="text" id="cat-name" placeholder="New category" aria-label="New category">
+        <button class="btn primary" type="submit">Add</button>
+      </form>
+      <div class="error" id="cat-error" hidden></div>
+    </div>
+
+    <div class="seg" id="f-kind" role="group" aria-label="Words or phrases" style="margin-bottom:10px"></div>
+    <div class="seg alpha" id="f-alpha" role="group" aria-label="First letter" style="margin-bottom:18px"></div>
+
+    <div class="words" id="words-list"></div>
+  </section>
+
+  <!-- Review -->
+  <section class="view" id="review"><div class="stage" id="review-stage"></div></section>
+
+  <!-- Quiz -->
+  <section class="view" id="quiz"><div class="stage" id="quiz-stage"></div></section>
+
+  <!-- Coach -->
+  <section class="view" id="chat">
+    <div class="row no-print" style="justify-content:flex-end;margin-bottom:12px">
+      <button class="btn" id="chat-new" type="button">New session</button>
+    </div>
+    <div id="chat-list"></div>
+    <form id="chat-form" class="row">
+      <button class="btn" id="chat-mic" type="button" title="Speak" aria-label="Speak into the microphone">🎤</button>
+      <textarea class="grow" id="chat-input" rows="1" placeholder="Write or speak in English…" aria-label="Message"></textarea>
+      <button class="btn primary" id="chat-send" type="submit">Send</button>
+      <label class="row small" style="flex-basis:100%;margin:0;gap:6px">
+        <input type="checkbox" id="chat-voice"> Read the coach replies aloud
+        <span class="muted" id="chat-voice-note"></span>
+      </label>
+    </form>
+  </section>
+
+  </div>
+</main>
+
+<script>
+// ---------- Helpers ----------
+const $ = (id) => document.getElementById(id);
+function h(tag, attrs, ...children) {
+  const node = document.createElement(tag);
+  for (const [key, value] of Object.entries(attrs || {})) {
+    if (key === 'class') node.className = value;
+    else if (key.startsWith('on')) node.addEventListener(key.slice(2), value);
+    else if (value === true) node.setAttribute(key, '');
+    else if (value !== false && value != null) node.setAttribute(key, value);
+  }
+  for (const child of children.flat()) if (child != null && child !== false && child !== '') node.append(child);
+  return node;
+}
+async function api(path, options = {}) {
+  const res = await fetch(path, {
+    method: options.method || (options.body ? 'POST' : 'GET'),
+    headers: options.body ? {'Content-Type': 'application/json'} : undefined,
+    body: options.body ? JSON.stringify(options.body) : undefined,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || res.statusText);
+  return data;
+}
+function showError(node, err) { node.textContent = 'Error: ' + err.message; node.hidden = false; }
+function speak(text) {
+  if (!('speechSynthesis' in window)) return;
+  const voice = new SpeechSynthesisUtterance(text);
+  voice.lang = 'en-GB'; speechSynthesis.cancel(); speechSynthesis.speak(voice);
+}
+function speakButton(text) {
+  return h('button', {class: 'speak', type: 'button', title: 'Pronunciation', 'aria-label': 'Play pronunciation',
+                      onclick: (e) => { e.stopPropagation(); e.preventDefault(); speak(text); }}, '🔊');
+}
+function examplesList(examples, onDelete) {
+  return h('ul', {class: 'examples'}, (examples || []).map((ex, i) => {
+    const wrong = ex.correct === false;
+    return h('li', null,
+      h('div', {class: wrong ? 'ex-wrong' : ''},
+        ex.correct !== undefined && h('span', {class: wrong ? 'mark bad' : 'mark ok'}, wrong ? '✗ ' : '✓ '),
+        ex.tense && h('span', {class: 'chip tense'}, ex.tense), ex.tense && ' ',
+        ex.own && h('span', {class: 'chip mine'}, 'mine'), ex.own && ' ',
+        h('span', {class: 'en'}, ex.en), ' ', !wrong && speakButton(ex.en),
+        onDelete && h('button', {class: 'speak', type: 'button', title: 'Remove this example',
+                                 'aria-label': 'Remove this example',
+                                 onclick: () => onDelete(i)}, '✕')),
+      ex.uk && h('div', {class: 'uk'}, ex.uk));
+  }));
+}
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(',')[1] || '');
+    reader.onerror = () => reject(new Error('Could not read the file'));
+    reader.readAsDataURL(file);
+  });
+}
+function segment(box, options, current, onPick) {
+  box.replaceChildren(...options.map(([value, label, count, disabled]) =>
+    h('button', {type: 'button', class: value === current ? 'on' : '', disabled: !!disabled,
+                 'aria-pressed': String(value === current), onclick: () => onPick(value)},
+      label, count != null && h('small', null, count))));
+}
+
+// ---------- Navigation ----------
+const TITLES = {
+  upload: ['Upload', 'Paste a phrase or text, or upload images, PDFs and text files — the agent turns them into a lesson.'],
+  materials: ['Materials', 'Lessons the agent built from your material.'],
+  words: ['Vocabulary', 'Add a word or phrase and the agent creates a card with a translation and examples.'],
+  review: ['Review', 'Cards come back at growing intervals: the better you know a word, the less often you see it.'],
+  quiz: ['Quiz', 'Quizzes are built from your vocabulary and use no model requests.'],
+  chat: ['Coach', 'Write or speak in English — the coach replies and corrects your mistakes.'],
+};
+let meta = {categories: [], levels: []};
+const loaders = {};
+function activate(view) {
+  document.querySelectorAll('.view').forEach((s) => s.classList.toggle('on', s.id === view));
+  document.querySelectorAll('#nav button').forEach((b) => b.classList.toggle('on', b.dataset.view === view));
+  const [title, sub] = TITLES[view] || ['English Coach', ''];
+  $('view-title').textContent = title; $('view-sub').textContent = sub;
+  try { localStorage.setItem('view', view); } catch (e) {}
+}
+function openView(view) { activate(view); $('scroll').scrollTop = 0; if (loaders[view]) loaders[view](); }
+document.querySelectorAll('#nav button').forEach((b) => b.addEventListener('click', () => openView(b.dataset.view)));
+async function refreshStats() {
+  try {
+    meta = await api('/api/stats');
+    for (const [id, n] of [['n-materials', meta.materials], ['n-words', meta.words], ['n-due', meta.due]]) {
+      $(id).textContent = n; $(id).hidden = !n;
+    }
+  } catch (e) {}
+}
+
+// ---------- Upload ----------
+const typeNames = {text: 'Text', image: 'Image', pdf: 'PDF', file: 'File', files: 'Files'};
+const MAX_FILES = 8, MAX_BYTES = 10 * 1024 * 1024;
+let picked = [];
+function renderPicked() {
+  const total = picked.reduce((sum, f) => sum + f.size, 0);
+  $('m-count').textContent = picked.length
+    ? `${picked.length} of ${MAX_FILES} selected · ${(total / 1048576).toFixed(1)} MB`
+    : 'No files selected';
+  $('m-files').replaceChildren(...picked.map((f, i) =>
+    h('span', {class: 'chip'}, f.name, ' ',
+      h('button', {class: 'speak', type: 'button', 'aria-label': 'Remove ' + f.name,
+                   onclick: () => { picked.splice(i, 1); renderPicked(); }}, '✕'))));
+}
+$('m-file').addEventListener('change', (e) => {
+  for (const f of e.target.files) {
+    if (!picked.some((p) => p.name === f.name && p.size === f.size)) picked.push(f);
+  }
+  e.target.value = ''; $('m-error').hidden = true; renderPicked();
+});
+$('material-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const text = $('m-text').value.trim();
+  $('m-error').hidden = true;
+  if (!text && !picked.length) return showError($('m-error'), new Error('add some text or a file'));
+  if (picked.length > MAX_FILES) return showError($('m-error'), new Error(`too many files, ${MAX_FILES} at most`));
+  if (picked.reduce((sum, f) => sum + f.size, 0) > MAX_BYTES)
+    return showError($('m-error'), new Error('the files are over 10 MB in total'));
+  $('m-submit').disabled = true; $('m-result').hidden = true;
+  $('m-status').textContent = 'Building the lesson, this can take a minute…';
+  try {
+    const body = {text};
+    body.files = await Promise.all(picked.map(async (f) => ({name: f.name, type: f.type, data: await fileToBase64(f)})));
+    const res = await api('/api/materials', {body});
+    e.target.reset(); picked = []; renderPicked(); refreshStats();
+    if (res.kind === 'words') showWordsResult(res); else showLesson(res.material);
+  } catch (err) { showError($('m-error'), err); }
+  finally { $('m-submit').disabled = false; $('m-status').textContent = ''; }
+});
+/** Матеріал без граматики: слова пішли просто у словник. */
+function showWordsResult(res) {
+  const group = (title, terms) => terms.length ? h('div', {style: 'margin-top:12px'},
+    h('span', {class: 'label'}, `${title} · ${terms.length}`),
+    h('div', {class: 'family'}, terms.map((t) => h('span', {class: 'chip'}, t)))) : null;
+  $('m-result').replaceChildren(
+    h('h3', null, res.added.length ? 'Added to your vocabulary' : 'Nothing new to add'),
+    h('p', {class: 'muted'}, 'There was no grammar to build a lesson from, so these went straight into your vocabulary as cards.'),
+    group('New cards', res.added),
+    group('Already in your vocabulary', res.skipped),
+    h('button', {class: 'btn primary', type: 'button', style: 'margin-top:16px',
+                 onclick: () => openView('words')}, 'Open vocabulary'));
+  $('m-result').hidden = false;
+}
+loaders.upload = () => { $('m-error').hidden = true; };
+
+// ---------- Materials ----------
+let allMaterials = [], materialLevel = '';
+const lessonLevel = (m) => m.lesson.level || '';
+const lessonKind = (m) => ((m.lesson.sections || []).length ? 'grammar' : 'vocabulary');
+const LEVEL_NAMES = {A1: 'Beginner', A2: 'Elementary', B1: 'Intermediate',
+                     B2: 'Upper-intermediate', C1: 'Advanced', '': 'Level not set'};
+const KINDS = [['grammar', 'Grammar'], ['vocabulary', 'Vocabulary']];
+function lessonRow(m) {
+  return h('div', {class: 'card row', style: 'justify-content:space-between'},
+    h('div', null,
+      h('b', null, m.title),
+      h('div', {class: 'muted small'},
+        `${typeNames[m.source_type] || m.source_type} · ${m.lesson.items.length} words and phrases · ${m.created_at}`)),
+    h('button', {class: 'btn', type: 'button', onclick: () => showLesson(m)}, 'Open'));
+}
+function renderMaterials() {
+  const q = $('mf-search').value.trim().toLowerCase(), box = $('materials-list');
+  const count = (lvl) => allMaterials.filter((m) => lessonLevel(m) === lvl).length;
+  segment($('mf-level'), [['', 'All levels', allMaterials.length], ...meta.levels.map((l) => [l, l, count(l)])],
+    materialLevel, (value) => { materialLevel = value; renderMaterials(); });
+  const shown = allMaterials.filter((m) => (!materialLevel || lessonLevel(m) === materialLevel) &&
+    (!q || m.title.toLowerCase().includes(q)));
+  // Рівень → тип уроку. Усередині групи — у порядку додавання, тобто за програмою курсу.
+  const groups = [...meta.levels, ''].map((lvl) => ({
+    lvl, items: shown.filter((m) => lessonLevel(m) === lvl).sort((a, b) => a.id - b.id),
+  })).filter((g) => g.items.length);
+  box.replaceChildren(...groups.map((g) =>
+    h('details', {class: 'group', open: true},
+      h('summary', null,
+        h('span', {class: 'chip lvl'}, g.lvl || '—'),
+        h('span', {class: 'gname'}, LEVEL_NAMES[g.lvl] ?? g.lvl),
+        h('span', {class: 'muted small'}, `${g.items.length} ${g.items.length === 1 ? 'lesson' : 'lessons'}`)),
+      h('div', {class: 'gbody'}, KINDS.map(([kind, label]) => {
+        const items = g.items.filter((m) => lessonKind(m) === kind);
+        if (!items.length) return null;
+        return h('div', {class: 'subgroup'},
+          h('span', {class: 'label'}, `${label} · ${items.length}`),
+          h('div', {class: 'stack'}, items.map(lessonRow)));
+      })))));
+  if (!shown.length) box.append(h('div', {class: 'empty'},
+    allMaterials.length ? h('p', null, 'No lessons match these filters.') : [
+      h('p', null, 'No lessons yet.'),
+      h('button', {class: 'btn primary', type: 'button', onclick: () => openView('upload')}, 'Upload your first material')]));
+}
+loaders.materials = async () => {
+  $('lesson').hidden = true; $('materials-home').hidden = false;
+  try { await refreshStats(); allMaterials = (await api('/api/materials')).materials; renderMaterials(); }
+  catch (err) { $('materials-list').replaceChildren(h('div', {class: 'error'}, 'Error: ' + err.message)); }
+};
+$('mf-search').addEventListener('input', renderMaterials);
+
+function normalize(text) {
+  return String(text).toLowerCase().replace(/[’‘`]/g, "'").replace(/[.!?,;]+$/g, '').replace(/\s+/g, ' ').trim();
+}
+function exerciseBlock(exercise, number) {
+  const questions = exercise.questions.map((q, i) => {
+    const result = h('span', {class: 'small'});
+    const accepted = q.answers.map(normalize);
+    const verdict = (given) => {
+      const right = accepted.includes(normalize(given));
+      result.className = 'small ' + (right ? 'mark ok' : 'mark bad');
+      result.textContent = right ? '✓ Correct' : '✗ Correct answer: ' + q.answers.join(' / ');
+      return right;
+    };
+    let control;
+    if (q.options && q.options.length) {
+      control = h('div', {class: 'row'}, q.options.map((opt) =>
+        h('button', {class: 'btn opt', type: 'button', onclick: (e) => {
+          control.querySelectorAll('button').forEach((b) => b.classList.remove('right', 'wrong'));
+          e.target.classList.add(verdict(opt) ? 'right' : 'wrong');
+        }}, opt)));
+    } else {
+      const field = h('input', {type: 'text', class: 'grow', 'aria-label': 'Answer ' + (i + 1), autocomplete: 'off'});
+      const check = () => { if (field.value.trim()) verdict(field.value); };
+      field.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); check(); } });
+      control = h('div', {class: 'row'}, field, h('button', {class: 'btn', type: 'button', onclick: check}, 'Check'));
+    }
+    return h('li', null, h('div', {class: 'en'}, q.prompt), control, result);
+  });
+  const key = h('ol', {class: 'key', hidden: true}, exercise.questions.map((q) => h('li', null, q.answers.join(' / '))));
+  return h('div', {class: 'card exercise'},
+    h('h3', null, `Exercise ${number}. ${exercise.title}`),
+    exercise.instruction_uk && h('p', {class: 'muted'}, exercise.instruction_uk),
+    h('ol', {class: 'questions'}, questions),
+    h('button', {class: 'btn link no-print', type: 'button',
+      onclick: (e) => { key.hidden = !key.hidden; e.target.textContent = key.hidden ? 'Show answers' : 'Hide answers'; }},
+      'Show answers'),
+    key);
+}
+function sectionBlock(section) {
+  return h('div', {class: 'card'},
+    h('h3', {class: 'sec'}, section.heading),
+    section.explanation_uk && h('p', null, section.explanation_uk),
+    section.table && h('div', {class: 'table-wrap'}, h('table', null,
+      section.table.headers.length ? h('thead', null, h('tr', null, section.table.headers.map((c) => h('th', null, c)))) : null,
+      h('tbody', null, section.table.rows.map((row) => h('tr', null, row.map((c) => h('td', null, c))))))),
+    examplesList(section.examples));
+}
+/** Власні нотатки до уроку: зберігаються, щойно поле втрачає фокус. */
+function notesBox(m) {
+  const status = h('span', {class: 'muted small no-print'});
+  const field = h('textarea', {rows: 3, 'aria-label': 'My notes',
+                               placeholder: 'Your notes about this lesson — questions, examples from work, things to revise…'});
+  field.value = m.notes || '';
+  const grow = () => { field.style.height = 'auto'; field.style.height = field.scrollHeight + 'px'; };
+  field.addEventListener('input', () => { grow(); status.textContent = ''; });
+  field.addEventListener('blur', async () => {
+    if (field.value === (m.notes || '')) return;
+    status.textContent = 'Saving…';
+    try { await api('/api/materials/' + m.id, {body: {notes: field.value}}); m.notes = field.value; status.textContent = 'Saved'; }
+    catch (err) { status.textContent = 'Error: ' + err.message; }
+  });
+  setTimeout(grow, 0);
+  return h('div', {class: 'card notes'},
+    h('div', {class: 'row', style: 'justify-content:space-between;margin-bottom:8px'},
+      h('h3', {style: 'margin:0'}, 'My notes'), status),
+    field);
+}
+function showLesson(m) {
+  const lesson = m.lesson, box = $('lesson'), status = h('span', {class: 'muted small'});
+  const sections = lesson.sections || [], exercises = lesson.exercises || [];
+  async function add(indexes, button) {
+    button.disabled = true;
+    try {
+      const r = await api('/api/words/from-material', {body: {material_id: m.id, indexes}});
+      status.textContent = `Added: ${r.added}` + (r.skipped ? `, already in vocabulary: ${r.skipped}` : '');
+      if (indexes) button.textContent = 'Added'; else button.disabled = false;
+      refreshStats();
+    } catch (err) { status.textContent = 'Error: ' + err.message; button.disabled = false; }
+  }
+  box.replaceChildren(
+    h('div', {class: 'row no-print', style: 'justify-content:space-between'},
+      h('button', {class: 'btn link', type: 'button', onclick: loaders.materials}, '← Back to lessons'),
+      h('button', {class: 'btn', type: 'button', onclick: () => window.print()}, 'Print / save as PDF')),
+    h('div', {style: 'margin:12px 0 20px'},
+      h('h2', null, m.title),
+      h('div', {class: 'row'},
+        h('select', {class: 'no-print', 'aria-label': 'Lesson level', title: 'Lesson level', onchange: async (e) => {
+          lesson.level = e.target.value; await api('/api/materials/' + m.id, {body: {level: e.target.value}});
+        }}, !lesson.level && h('option', {value: '', selected: true}, 'No level'),
+          meta.levels.map((l) => h('option', {value: l, selected: l === lesson.level}, l))),
+        h('span', {class: 'chip'}, sections.length ? 'Grammar' : 'Vocabulary'),
+        h('span', {class: 'chip'}, lesson.topic_type === 'programming' ? 'Programming' : 'General'),
+        h('span', {class: 'chip'}, typeNames[m.source_type] || m.source_type),
+        m.file_name && h('span', {class: 'muted small'}, m.file_name))),
+    h('div', {class: 'card'}, h('h3', null, 'About this material'), h('p', null, lesson.summary_uk),
+      lesson.tips_uk.length ? h('div', {class: 'note'}, h('b', null, 'Watch out'),
+        h('ul', {style: 'margin:0;padding-left:18px'}, lesson.tips_uk.map((t) => h('li', null, t)))) : null),
+    notesBox(m),
+    sections.length ? h('h3', {class: 'part'}, 'Theory') : null,
+    h('div', {class: 'stack'}, sections.map(sectionBlock)),
+    exercises.length ? h('h3', {class: 'part'}, 'Exercises') : null,
+    h('div', {class: 'stack'}, exercises.map((ex, i) => exerciseBlock(ex, i + 1))),
+    lesson.items.length ? h('div', {class: 'row', style: 'margin:26px 0 12px;justify-content:space-between'},
+      h('h3', {style: 'margin:0;font-size:19px'}, 'Words and phrases'),
+      h('div', {class: 'row no-print'}, status,
+        h('button', {class: 'btn primary', type: 'button', onclick: (e) => add(null, e.target)}, 'Add all to vocabulary'))) : null,
+    h('div', {class: 'stack'}, lesson.items.map((item, i) =>
+      h('div', {class: 'card'},
+        h('div', {class: 'row', style: 'justify-content:space-between'},
+          h('div', null, h('span', {class: 'term'}, item.term), ' ', speakButton(item.term), ' ',
+            h('span', {class: 'ipa'}, item.transcription), ' ', h('span', {class: 'pos'}, item.part_of_speech)),
+          h('div', {class: 'row'}, h('span', {class: 'chip lvl'}, item.level), h('span', {class: 'chip'}, item.category),
+            h('button', {class: 'btn no-print', type: 'button', onclick: (e) => add([i], e.target)}, 'Add'))),
+        item.forms && h('div', {class: 'ipa'}, 'Forms: ', item.forms),
+        h('div', {class: 'translation'}, item.translation_uk),
+        h('div', {class: 'muted'}, item.definition_en),
+        (item.family || []).length ? h('div', {style: 'margin-top:12px'},
+          h('span', {class: 'label'}, 'Word family'),
+          h('div', {class: 'family'}, item.family.map((rel) =>
+            h('span', {class: 'fam', title: rel.translation_uk},
+              h('span', null, rel.term), h('span', {class: 'pos'}, rel.part_of_speech))))) : null,
+        examplesList(item.examples)))),
+    h('div', {class: 'no-print', style: 'margin-top:24px'},
+      h('button', {class: 'btn danger', type: 'button', onclick: async () => {
+        if (!confirm('Delete this lesson? Words already added to your vocabulary stay.')) return;
+        await api('/api/materials/' + m.id, {method: 'DELETE'}); refreshStats(); loaders.materials();
+      }}, 'Delete lesson')));
+  activate('materials');
+  $('materials-home').hidden = true; box.hidden = false; $('scroll').scrollTop = 0;
+}
+
+// ---------- Vocabulary ----------
+const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+let allWords = [], wordKind = '', wordLetter = '';
+const isPhrase = (w) => /\s/.test(w.term.trim());
+const firstLetter = (w) => {
+  const c = w.term.trim()[0] ? w.term.trim()[0].toUpperCase() : '#';
+  return LETTERS.includes(c) ? c : '#';
+};
+const findWord = (term) => allWords.find((w) => w.term.toLowerCase() === String(term).toLowerCase());
+function fillFilters() {
+  const fill = (select, first, values) => {
+    const keep = select.value;
+    select.replaceChildren(h('option', {value: ''}, first), ...values.map((v) => h('option', {value: v}, v)));
+    select.value = values.includes(keep) ? keep : '';
+  };
+  fill($('f-category'), 'All categories', meta.categories);
+  fill($('f-level'), 'All levels', meta.levels);
+}
+/** Скидає фільтри, відкриває картку слова і підсвічує її. */
+function revealWord(term) {
+  $('f-search').value = ''; $('f-category').value = ''; $('f-level').value = '';
+  wordKind = ''; wordLetter = '';
+  renderWords();
+  const card = $('words-list').querySelector(`[data-term="${CSS.escape(String(term).toLowerCase())}"]`);
+  if (!card) return;
+  $('words-list').querySelectorAll('.word[open]').forEach((d) => { if (d !== card) d.open = false; });
+  card.open = true;
+  card.scrollIntoView({block: 'center', behavior: 'smooth'});
+  card.classList.remove('flash'); void card.offsetWidth; card.classList.add('flash');
+}
+/** Перехід на споріднене слово: якщо його ще немає у словнику, спершу створюємо картку. */
+async function goToRelative(term, chip) {
+  if (findWord(term)) return revealWord(term);
+  const label = chip.textContent;
+  chip.disabled = true; chip.textContent = 'Adding…';
+  try {
+    const r = await api('/api/words', {body: {term}});
+    await loaders.words();
+    revealWord(r.term || term);
+  } catch (err) {
+    chip.disabled = false; chip.textContent = label;
+    showError($('w-error'), err);
+  }
+}
+function familyBlock(w) {
+  if (!(w.family || []).length) return null;
+  return h('div', {style: 'margin-top:14px'},
+    h('span', {class: 'label'}, 'Word family'),
+    h('div', {class: 'family'}, w.family.map((rel) => {
+      const known = !!findWord(rel.term);
+      return h('button', {class: 'fam', type: 'button',
+        title: rel.translation_uk + (known ? '' : ' — not in your vocabulary yet, click to add'),
+        onclick: (e) => { e.preventDefault(); goToRelative(rel.term, e.currentTarget); }},
+        h('span', null, rel.term),
+        h('span', {class: 'pos'}, rel.part_of_speech),
+        h('span', {class: 'go'}, known ? '→' : '+'));
+    })));
+}
+function wordCard(w) {
+  const pick = (values, current, field) => h('select', {'aria-label': field === 'level' ? 'Level' : 'Category',
+    onchange: async (e) => {
+      w[field] = e.target.value;
+      await api('/api/words/' + w.id, {body: {[field]: e.target.value}});
+      renderWords();
+    }}, values.map((v) => h('option', {value: v, selected: v === current}, v)));
+  return h('details', {class: 'card word', 'data-term': w.term.toLowerCase()},
+    h('summary', null, h('span', {class: 'term'}, w.term), speakButton(w.term)),
+    h('div', {class: 'body'},
+      h('div', {class: 'meta'},
+        h('div', null, h('span', {class: 'ipa'}, w.transcription), ' ', h('span', {class: 'pos'}, w.part_of_speech)),
+        h('div', {class: 'translation'}, w.translation),
+        w.forms && h('div', {class: 'ipa', style: 'margin-top:6px'}, 'Forms: ', w.forms),
+        w.definition && h('p', {class: 'muted', style: 'margin-top:10px'}, w.definition),
+        familyBlock(w),
+        h('div', {class: 'row', style: 'margin-top:16px'},
+          pick(meta.categories, w.category, 'category'), pick(meta.levels, w.level, 'level'),
+          h('button', {class: 'btn danger sm', type: 'button', onclick: async () => {
+            if (!confirm(`Delete “${w.term}” from your vocabulary?`)) return;
+            await api('/api/words/' + w.id, {method: 'DELETE'}); loaders.words();
+          }}, 'Delete'))),
+      h('div', {class: 'ex'}, h('span', {class: 'label'}, 'Examples'), exampleBox(w))));
+}
+/** Приклади картки разом із формою для власних. */
+function exampleBox(w) {
+  const list = h('div', null);
+  const error = h('div', {class: 'error small', hidden: true});
+  const en = h('input', {type: 'text', class: 'grow', placeholder: 'Your own example in English',
+                         'aria-label': 'Your own example in English', autocomplete: 'off'});
+  const uk = h('input', {type: 'text', class: 'grow', placeholder: 'Translation (optional)',
+                         'aria-label': 'Translation', autocomplete: 'off'});
+  const draw = () => list.replaceChildren(examplesList(w.examples, async (i) => {
+    try { w.examples = (await api(`/api/words/${w.id}/examples/${i}`, {method: 'DELETE'})).examples; draw(); }
+    catch (err) { showError(error, err); }
+  }));
+  const addBtn = h('button', {class: 'btn sm', type: 'button', onclick: async () => {
+    if (!en.value.trim()) return;
+    error.hidden = true; addBtn.disabled = true;
+    try {
+      w.examples = (await api(`/api/words/${w.id}/examples`, {body: {en: en.value, uk: uk.value}})).examples;
+      en.value = ''; uk.value = ''; draw();
+    } catch (err) { showError(error, err); }
+    finally { addBtn.disabled = false; }
+  }}, 'Add example');
+  for (const field of [en, uk]) {
+    field.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addBtn.click(); } });
+  }
+  draw();
+  return h('div', null, list,
+    h('div', {class: 'own-form'}, h('div', {class: 'row'}, en, uk, addBtn), error));
+}
+function renderWords() {
+  const q = $('f-search').value.trim().toLowerCase(), cat = $('f-category').value, lvl = $('f-level').value;
+  const base = allWords.filter((w) => (!wordKind || (wordKind === 'phrase') === isPhrase(w)) &&
+    (!cat || w.category === cat) && (!lvl || w.level === lvl) &&
+    (!q || w.term.toLowerCase().includes(q) || w.translation.toLowerCase().includes(q)));
+  const phrases = allWords.filter(isPhrase).length;
+  segment($('f-kind'), [['', 'All', allWords.length], ['word', 'Words', allWords.length - phrases],
+                        ['phrase', 'Phrases', phrases]],
+    wordKind, (value) => { wordKind = value; renderWords(); });
+  const used = new Set(base.map(firstLetter));
+  if (wordLetter && !used.has(wordLetter)) wordLetter = '';
+  segment($('f-alpha'), [['', 'All', base.length],
+      ...LETTERS.map((c) => [c, c, null, !used.has(c)]), ...(used.has('#') ? [['#', '#']] : [])],
+    wordLetter, (value) => { wordLetter = value; renderWords(); });
+  const shown = base.filter((w) => !wordLetter || firstLetter(w) === wordLetter);
+  $('words-list').replaceChildren(...shown.map(wordCard));
+  if (!shown.length) $('words-list').append(h('div', {class: 'empty', style: 'grid-column:1/-1'},
+    allWords.length ? 'Nothing matches these filters.'
+                    : 'Your vocabulary is empty. Add a word above, or create a lesson on the Upload page.'));
+}
+loaders.words = async () => {
+  await refreshStats(); fillFilters();
+  try {
+    allWords = (await api('/api/words')).words;
+    allWords.sort((a, b) => a.term.localeCompare(b.term, 'en', {sensitivity: 'base'}));
+    renderWords();
+    if (!$('cat-panel').hidden) renderCategories();
+  } catch (err) { $('words-list').replaceChildren(h('div', {class: 'error'}, 'Error: ' + err.message)); }
+};
+['f-search', 'f-category', 'f-level'].forEach((id) => $(id).addEventListener('input', renderWords));
+$('word-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const term = $('w-term').value.trim();
+  if (!term) return;
+  $('w-error').hidden = true; $('w-note').textContent = '';
+  $('w-submit').disabled = true; $('w-submit').textContent = 'Creating…';
+  try {
+    const r = await api('/api/words', {body: {term}});
+    $('w-term').value = '';
+    await loaders.words();
+    revealWord(r.term);
+    $('w-note').textContent = r.existed ? `“${r.term}” was already in your vocabulary` : '';
+  } catch (err) { showError($('w-error'), err); }
+  finally { $('w-submit').disabled = false; $('w-submit').textContent = 'Add card'; }
+});
+$('w-term').addEventListener('input', () => { $('w-note').textContent = ''; $('w-error').hidden = true; });
+
+// ---------- Categories ----------
+let categories = [], fallback = 'Other';
+function renderCategories() {
+  $('cat-list').replaceChildren(...categories.map((c) => {
+    const field = h('input', {type: 'text', value: c.name, 'aria-label': 'Category name'});
+    const save = async () => {
+      const name = field.value.trim();
+      if (!name || name === c.name) { field.value = c.name; return; }
+      $('cat-error').hidden = true;
+      try { await applyCategories(await api('/api/categories/' + c.id, {body: {name}})); }
+      catch (err) { field.value = c.name; showError($('cat-error'), err); }
+    };
+    field.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); field.blur(); } });
+    field.addEventListener('blur', save);
+    const isFallback = c.name.toLowerCase() === fallback.toLowerCase();
+    return h('div', {class: 'cat-row'}, field,
+      h('span', {class: 'muted small'}, `${c.words} ${c.words === 1 ? 'card' : 'cards'}`),
+      h('button', {class: 'btn danger sm', type: 'button', disabled: isFallback,
+        title: isFallback ? 'Cards from deleted categories move here' : '', onclick: async () => {
+        if (!confirm(`Delete “${c.name}”?` + (c.words ? ` Its ${c.words} card(s) move to “Other”.` : ''))) return;
+        $('cat-error').hidden = true;
+        try { await applyCategories(await api('/api/categories/' + c.id, {method: 'DELETE'})); }
+        catch (err) { showError($('cat-error'), err); }
+      }}, 'Delete'));
+  }));
+  if (!categories.length) $('cat-list').append(h('div', {class: 'muted small'}, 'No categories yet.'));
+}
+async function applyCategories(data) {
+  categories = data.categories;
+  if (data.fallback) fallback = data.fallback;
+  meta.categories = categories.map((c) => c.name);
+  renderCategories(); fillFilters();
+  await loaders.words();
+}
+$('cat-toggle').addEventListener('click', async () => {
+  const panel = $('cat-panel');
+  panel.hidden = !panel.hidden;
+  $('cat-toggle').classList.toggle('primary', !panel.hidden);
+  if (!panel.hidden) {
+    $('cat-error').hidden = true;
+    try {
+      const data = await api('/api/categories');
+      categories = data.categories; fallback = data.fallback || fallback; renderCategories();
+    } catch (err) { showError($('cat-error'), err); }
+  }
+});
+$('cat-add').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const name = $('cat-name').value.trim();
+  if (!name) return;
+  $('cat-error').hidden = true;
+  try { await applyCategories(await api('/api/categories', {body: {name}})); $('cat-name').value = ''; }
+  catch (err) { showError($('cat-error'), err); }
+});
+
+// ---------- Review ----------
+loaders.review = async () => {
+  const stage = $('review-stage');
+  let queue = [], done = 0;
+  try { queue = (await api('/api/review')).words; }
+  catch (err) { return stage.replaceChildren(h('div', {class: 'error'}, 'Error: ' + err.message)); }
+  const total = queue.length;
+  function next() {
+    refreshStats();
+    if (!queue.length) {
+      return stage.replaceChildren(h('div', {class: 'card'},
+        h('h3', null, total ? 'All done for today!' : 'Nothing to review'),
+        h('p', {class: 'muted', style: 'margin:0'}, total ? `Cards reviewed: ${done}. Come back tomorrow.`
+          : 'Add words to your vocabulary and they will show up here.')));
+    }
+    const w = queue[0];
+    const answer = h('div', {class: 'answer', hidden: true},
+      h('div', {class: 'translation', style: 'margin-top:0'}, w.translation),
+      h('div', {class: 'muted'}, w.definition),
+      w.forms && h('div', {class: 'ipa'}, 'Forms: ', w.forms), examplesList(w.examples));
+    const grade = (value) => async () => {
+      await api('/api/review/' + w.id, {body: {grade: value}});
+      queue.shift(); if (value === 0) queue.push(w); else done++;
+      next();
+    };
+    const grades = h('div', {class: 'grades', hidden: true},
+      h('button', {class: 'btn', type: 'button', onclick: grade(0)}, "Don't know"),
+      h('button', {class: 'btn', type: 'button', onclick: grade(1)}, 'Hard'),
+      h('button', {class: 'btn', type: 'button', onclick: grade(2)}, 'Know it'),
+      h('button', {class: 'btn', type: 'button', onclick: grade(3)}, 'Easy'));
+    const reveal = h('button', {class: 'btn primary', type: 'button', style: 'margin-top:20px',
+      onclick: () => { answer.hidden = false; grades.hidden = false; reveal.hidden = true; }}, 'Show answer');
+    stage.replaceChildren(
+      h('div', {class: 'muted small', style: 'margin-bottom:10px'}, `Remaining: ${queue.length}`),
+      h('div', {class: 'card'},
+        h('div', {class: 'row', style: 'justify-content:center'},
+          h('span', {class: 'chip lvl'}, w.level), h('span', {class: 'chip'}, w.category)),
+        h('div', {class: 'term', style: 'margin-top:14px'}, w.term, ' ', speakButton(w.term)),
+        h('div', {class: 'ipa'}, w.transcription), reveal, answer, grades));
+  }
+  next();
+};
+
+// ---------- Quiz ----------
+loaders.quiz = () => {
+  const stage = $('quiz-stage');
+  const error = h('div', {class: 'error', hidden: true});
+  async function start(kind) {
+    error.hidden = true;
+    let questions;
+    try { questions = (await api('/api/quiz?kind=' + kind)).questions; }
+    catch (err) { return showError(error, err); }
+    let index = 0, score = 0;
+    function show() {
+      if (index >= questions.length) {
+        return stage.replaceChildren(h('div', {class: 'card'},
+          h('h3', null, `Score: ${score} of ${questions.length}`),
+          h('button', {class: 'btn primary', type: 'button', onclick: loaders.quiz}, 'Try again')));
+      }
+      const q = questions[index];
+      const nextBtn = h('button', {class: 'btn primary', type: 'button', hidden: true, style: 'margin-top:18px',
+        onclick: () => { index++; show(); }}, index + 1 < questions.length ? 'Next' : 'Result');
+      const options = h('div', {class: 'options'}, q.options.map((opt) =>
+        h('button', {class: 'btn', type: 'button', onclick: (e) => {
+          if (opt === q.answer) score++; else e.target.classList.add('wrong');
+          options.querySelectorAll('button').forEach((b) => {
+            b.disabled = true; if (b.textContent === q.answer) b.classList.add('right'); });
+          nextBtn.hidden = false; nextBtn.focus();
+        }}, opt)));
+      stage.replaceChildren(
+        h('div', {class: 'progress'}, h('i', {style: `width:${(index / questions.length) * 100}%`})),
+        h('div', {class: 'card'},
+          h('div', {class: 'muted small'}, `Question ${index + 1} of ${questions.length}`),
+          h('div', {class: 'term', style: kind === 'gap' ? 'font-size:21px;margin-top:10px' : 'margin-top:10px'}, q.prompt),
+          h('div', {class: 'ipa'}, q.hint), options, nextBtn));
+    }
+    show();
+  }
+  stage.replaceChildren(h('div', {class: 'card'},
+    h('h3', null, 'Pick a quiz type'),
+    h('div', {class: 'row', style: 'justify-content:center;margin-top:14px'},
+      h('button', {class: 'btn primary', type: 'button', onclick: () => start('choice')}, 'Choose the translation'),
+      h('button', {class: 'btn primary', type: 'button', onclick: () => start('gap')}, 'Fill the gap')),
+    error));
+};
+
+// ---------- Coach ----------
+const MARK = '--- Feedback ---';
+let chatBusy = false, chatStarted = false;
+function chatAdd(node) { $('chat-list').append(node); node.scrollIntoView({block: 'end'}); }
+function chatCoach(text) {
+  const cut = text.indexOf(MARK);
+  const talk = (cut === -1 ? text : text.slice(0, cut)).trim();
+  const notes = cut === -1 ? '' : text.slice(cut + MARK.length).trim();
+  chatAdd(h('div', {class: 'msg coach'},
+    talk && h('div', {class: 'bubble'}, talk, ' ', speakButton(talk)),
+    notes && h('div', {class: 'note'}, h('b', null, 'Feedback'), notes)));
+  if (talk && $('chat-voice').checked) speak(talk);
+}
+async function chatCall(path, body) {
+  const typing = h('div', {class: 'typing'}, 'Coach is typing…');
+  chatAdd(typing); chatBusy = true; $('chat-send').disabled = $('chat-new').disabled = true;
+  try { chatCoach((await api(path, {body: body || {}})).reply); }
+  catch (err) { chatAdd(h('div', {class: 'error', style: 'align-self:center'}, 'Error: ' + err.message)); }
+  finally {
+    typing.remove(); chatBusy = false;
+    $('chat-send').disabled = $('chat-new').disabled = false; $('chat-input').focus();
+  }
+}
+function chatStart() { chatStarted = true; $('chat-list').replaceChildren(); chatCall('/api/start'); }
+loaders.chat = () => {
+  if (chatStarted) return;
+  $('chat-list').replaceChildren(h('div', {class: 'empty'},
+    h('p', null, 'The coach will say hello and ask the first question.'),
+    h('button', {class: 'btn primary', type: 'button', onclick: chatStart}, 'Start the conversation')));
+};
+$('chat-new').addEventListener('click', chatStart);
+$('chat-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const text = $('chat-input').value.trim();
+  if (!text || chatBusy) return;
+  if (!chatStarted) { chatStarted = true; $('chat-list').replaceChildren(); }
+  $('chat-voice-note').textContent = '';
+  $('chat-input').value = ''; $('chat-input').style.height = 'auto';
+  chatAdd(h('div', {class: 'msg me'}, h('div', {class: 'bubble'}, text)));
+  chatCall('/api/chat', {text});
+});
+$('chat-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('chat-form').requestSubmit(); }
+});
+$('chat-input').addEventListener('input', (e) => {
+  e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px';
+});
+
+// Speech recognition (Chrome, Edge)
+const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+let recognition = null, listening = false;
+function micStart() {
+  if (chatBusy) return;
+  if ('speechSynthesis' in window) speechSynthesis.cancel();
+  recognition = new Recognition();
+  recognition.lang = 'en-GB'; recognition.interimResults = true; recognition.continuous = false;
+  const before = $('chat-input').value.trim();
+  recognition.onresult = (e) => {
+    const said = Array.from(e.results).map((r) => r[0].transcript).join(' ');
+    $('chat-input').value = (before + ' ' + said).trim();
+  };
+  recognition.onerror = (e) => {
+    const reasons = {'not-allowed': 'no microphone access — allow it in the browser',
+                     'no-speech': 'nothing was heard, try again', 'network': 'no connection for recognition'};
+    $('chat-voice-note').textContent = '· Microphone: ' + (reasons[e.error] || e.error);
+  };
+  recognition.onend = () => {
+    listening = false; $('chat-mic').classList.remove('rec'); $('chat-mic').textContent = '🎤';
+    if ($('chat-input').value.trim() && $('chat-input').value.trim() !== before) $('chat-form').requestSubmit();
+  };
+  $('chat-voice-note').textContent = '· Listening… speak in English';
+  listening = true; $('chat-mic').classList.add('rec'); $('chat-mic').textContent = '⏹';
+  recognition.start();
+}
+if (Recognition) {
+  $('chat-mic').addEventListener('click', () => (listening ? recognition.stop() : micStart()));
+} else {
+  $('chat-mic').disabled = true;
+  $('chat-mic').title = 'Speech recognition works in Chrome and Edge';
+  $('chat-voice-note').textContent = '· The microphone is not available in this browser — open the page in Chrome or Edge';
+}
+try { $('chat-voice').checked = localStorage.getItem('voice') === '1'; } catch (e) {}
+$('chat-voice').addEventListener('change', (e) => {
+  try { localStorage.setItem('voice', e.target.checked ? '1' : '0'); } catch (err) {}
+  if (!e.target.checked && 'speechSynthesis' in window) speechSynthesis.cancel();
+});
+
+// ---------- Start ----------
+let first = 'materials';
+try { first = localStorage.getItem('view') || first; } catch (e) {}
+refreshStats().then(() => openView(loaders[first] ? first : 'materials'));
+</script>
+</body>
+</html>

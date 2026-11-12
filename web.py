@@ -116,6 +116,50 @@ def category_delete(category_id):
     return category_list()
 
 
+# ---------- Колекції ----------
+
+def collection_list(_=None):
+    return {"collections": db.list_collections()}
+
+
+def collection_create(data):
+    name = " ".join(str(data.get("name", "")).split())[:40]
+    if not name:
+        raise ApiError(400, "Enter a collection name")
+    if db.query("SELECT 1 FROM collections WHERE name = ? COLLATE NOCASE", (name,)):
+        raise ApiError(409, f"Collection “{name}” already exists")
+    created = db.add_collection(name)
+    return {"collections": db.list_collections(), "created": created}
+
+
+def collection_rename(collection_id, data):
+    name = " ".join(str(data.get("name", "")).split())[:40]
+    if not name:
+        raise ApiError(400, "Enter a collection name")
+    clash = db.query("SELECT id FROM collections WHERE name = ? COLLATE NOCASE", (name,))
+    if clash and clash[0]["id"] != collection_id:
+        raise ApiError(409, f"Collection “{name}” already exists")
+    if not db.rename_collection(collection_id, name):
+        raise ApiError(404, "Collection not found")
+    return collection_list()
+
+
+def collection_delete(collection_id):
+    if not db.delete_collection(collection_id):
+        raise ApiError(404, "Collection not found")
+    return collection_list()
+
+
+def word_collection(word_id, data):
+    try:
+        collection_id = int(data.get("collection_id", 0))
+    except (TypeError, ValueError):
+        raise ApiError(400, "Unknown collection") from None
+    if not db.set_word_collection(word_id, collection_id, bool(data.get("on"))):
+        raise ApiError(404, "Word or collection not found")
+    return {"ok": True}
+
+
 def material_update(material_id, data):
     changed = False
     if "level" in data:
@@ -130,6 +174,27 @@ def material_update(material_id, data):
     if not changed:
         raise ApiError(400, "Nothing to update")
     return {"ok": True}
+
+
+def add_related_words(item: dict) -> list[str]:
+    """Споріднені слова й синоніми одразу стають короткими картками."""
+    added = []
+    for entry in list(item.get("family") or []) + list(item.get("synonyms") or []):
+        if db.add_light_word(entry, item.get("level", "B1"), item.get("category", "Other")):
+            added.append(entry["term"])
+    return added
+
+
+def word_enrich(word_id, _=None):
+    """Доповнює коротку картку: транскрипція, приклади, споріднені слова, синоніми."""
+    rows = db.query("SELECT term FROM words WHERE id = ?", (word_id,))
+    if not rows:
+        raise ApiError(404, "Word not found")
+    item = build_card(rows[0]["term"])
+    if not item:
+        raise ApiError(500, "Could not complete the card")
+    db.complete_word(word_id, item)
+    return {"ok": True, "added": add_related_words(item)}
 
 
 def example_add(word_id, data):
@@ -176,7 +241,7 @@ def word_create(data):
     if existing:
         return {"ok": True, "term": existing["term"], "existed": True}
     db.add_word(item)
-    return {"ok": True, "term": item["term"], "existed": False}
+    return {"ok": True, "term": item["term"], "existed": False, "added": add_related_words(item)}
 
 
 def word_update(word_id, data):
@@ -184,6 +249,8 @@ def word_update(word_id, data):
         db.execute("UPDATE words SET category = ? WHERE id = ?", (data["category"], word_id))
     if data.get("level") in LEVELS:
         db.execute("UPDATE words SET level = ? WHERE id = ?", (data["level"], word_id))
+    if "note" in data:
+        db.execute("UPDATE words SET note = ? WHERE id = ?", (str(data["note"])[:2000], word_id))
     return {"ok": True}
 
 
@@ -198,6 +265,7 @@ def stats(_=None):
         "materials": db.query("SELECT COUNT(*) AS n FROM materials")[0]["n"],
         "due": len(db.due_words()),
         "categories": categories(),
+        "collections": db.list_collections(),
         "levels": LEVELS,
     }
 
@@ -230,6 +298,8 @@ class Handler(BaseHTTPRequestHandler):
     def _get(self, path, params):
         if path == "/api/categories":
             return category_list()
+        if path == "/api/collections":
+            return collection_list()
         if path == "/api/stats":
             return stats()
         if path == "/api/materials":
@@ -237,7 +307,8 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/words":
             return {"words": db.list_words()}
         if path == "/api/review":
-            return {"words": db.due_words()}
+            collection = params.get("collection")
+            return {"words": db.due_words(int(collection) if (collection or "").isdigit() else None)}
         if path == "/api/quiz":
             return quiz(params)
         raise ApiError(404, "Not found")
@@ -250,11 +321,18 @@ class Handler(BaseHTTPRequestHandler):
             "/api/words": word_create,
             "/api/words/from-material": material_add_words,
             "/api/categories": category_create,
+            "/api/collections": collection_create,
         }
         if path in simple:
             return simple[path](data)
         if match := re.fullmatch(r"/api/words/(\d+)/examples", path):
             return example_add(int(match[1]), data)
+        if match := re.fullmatch(r"/api/words/(\d+)/enrich", path):
+            return word_enrich(int(match[1]))
+        if match := re.fullmatch(r"/api/words/(\d+)/collections", path):
+            return word_collection(int(match[1]), data)
+        if match := re.fullmatch(r"/api/collections/(\d+)", path):
+            return collection_rename(int(match[1]), data)
         if match := re.fullmatch(r"/api/categories/(\d+)", path):
             return category_rename(int(match[1]), data)
         if match := re.fullmatch(r"/api/materials/(\d+)", path):
@@ -268,10 +346,15 @@ class Handler(BaseHTTPRequestHandler):
     def _delete(self, path):
         if match := re.fullmatch(r"/api/words/(\d+)/examples/(\d+)", path):
             return example_delete(int(match[1]), int(match[2]))
+        if match := re.fullmatch(r"/api/collections/(\d+)", path):
+            return collection_delete(int(match[1]))
         if match := re.fullmatch(r"/api/categories/(\d+)", path):
             return category_delete(int(match[1]))
-        if match := re.fullmatch(r"/api/(words|materials)/(\d+)", path):
-            db.execute(f"DELETE FROM {match[1]} WHERE id = ?", (int(match[2]),))
+        if match := re.fullmatch(r"/api/words/(\d+)", path):
+            db.delete_word(int(match[1]))
+            return {"ok": True}
+        if match := re.fullmatch(r"/api/materials/(\d+)", path):
+            db.execute("DELETE FROM materials WHERE id = ?", (int(match[1]),))
             return {"ok": True}
         raise ApiError(404, "Not found")
 

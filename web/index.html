@@ -177,9 +177,21 @@
 
   /* Own examples and lesson notes */
   .chip.mine { background: var(--accent); color: var(--accent-ink); font-size: 11px; }
+  .chip.partial { background: transparent; border: 1px dashed var(--accent-line); color: var(--muted);
+                  font-size: 11px; font-weight: 500; }
   .own-form { margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--line); }
   .own-form input { font-size: 14.5px; padding: 7px 10px; }
   .notes textarea { min-height: 72px; }
+  .word .note { white-space: pre-wrap; }
+
+  .fam.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .fam.on .pos, .fam.on .go { color: var(--accent-ink); }
+  .flip { border-top: 1px solid var(--line); margin-top: 20px; padding-top: 18px; text-align: left; }
+  .stage .hint { color: var(--muted); font-size: 13px; margin-top: 14px; }
+  .rv-nav { justify-content: space-between; margin-bottom: 10px; flex-wrap: nowrap; gap: 8px; }
+  .rv-nav .btn { white-space: nowrap; }
+  .stage kbd { font: inherit; font-size: 12px; margin: 0 1px; background: var(--accent-soft); border: 1px solid var(--accent-line);
+               border-radius: 5px; padding: 1px 6px; }
 
   /* Category manager */
   .cat-row { display: grid; grid-template-columns: 1fr auto auto; gap: 10px;
@@ -323,7 +335,9 @@
       <input class="grow" type="text" id="f-search" placeholder="Search…" aria-label="Search vocabulary">
       <select id="f-category" aria-label="Category"></select>
       <select id="f-level" aria-label="Level"></select>
+      <select id="f-collection" aria-label="Collection"></select>
       <button class="btn" id="cat-toggle" type="button">Categories</button>
+      <button class="btn" id="col-toggle" type="button">Collections</button>
     </div>
 
     <div class="card" id="cat-panel" hidden style="margin-bottom:16px">
@@ -337,14 +351,37 @@
       <div class="error" id="cat-error" hidden></div>
     </div>
 
-    <div class="seg" id="f-kind" role="group" aria-label="Words or phrases" style="margin-bottom:10px"></div>
+    <div class="card" id="col-panel" hidden style="margin-bottom:16px">
+      <h3>Manage collections</h3>
+      <p class="muted small">Collections group words for focused review. Deleting a collection keeps the words.</p>
+      <div id="col-list"></div>
+      <form class="row" id="col-add" style="margin-top:14px">
+        <input class="grow" type="text" id="col-name" placeholder="New collection, for example: Interview prep" aria-label="New collection">
+        <button class="btn primary" type="submit">Add</button>
+      </form>
+      <div class="error" id="col-error" hidden></div>
+    </div>
+
+    <div class="seg" id="f-pos" role="group" aria-label="Part of speech" style="margin-bottom:10px"></div>
     <div class="seg alpha" id="f-alpha" role="group" aria-label="First letter" style="margin-bottom:18px"></div>
 
     <div class="words" id="words-list"></div>
   </section>
 
   <!-- Review -->
-  <section class="view" id="review"><div class="stage" id="review-stage"></div></section>
+  <section class="view" id="review">
+    <div class="card" style="margin-bottom:18px">
+      <div class="row">
+        <span class="label" style="margin:0">Show first</span>
+        <div class="seg" id="rv-side" role="group" aria-label="Which side to show first"></div>
+        <span class="label" style="margin:0 0 0 12px">Collection</span>
+        <select id="rv-collection" aria-label="Collection to review"></select>
+        <span class="label" style="margin:0 0 0 12px">Part of speech</span>
+        <select id="rv-pos" aria-label="Part of speech to review"></select>
+      </div>
+    </div>
+    <div class="stage" id="review-stage"></div>
+  </section>
 
   <!-- Quiz -->
   <section class="view" id="quiz"><div class="stage" id="quiz-stage"></div></section>
@@ -642,7 +679,8 @@ function showLesson(m) {
     button.disabled = true;
     try {
       const r = await api('/api/words/from-material', {body: {material_id: m.id, indexes}});
-      status.textContent = `Added: ${r.added}` + (r.skipped ? `, already in vocabulary: ${r.skipped}` : '');
+      status.textContent = `Added: ${r.added}` + (r.skipped ? `, already there: ${r.skipped}` : '') +
+        ((r.related || []).length ? `, plus ${r.related.length} related` : '');
       if (indexes) button.textContent = 'Added'; else button.disabled = false;
       refreshStats();
     } catch (err) { status.textContent = 'Error: ' + err.message; button.disabled = false; }
@@ -684,11 +722,13 @@ function showLesson(m) {
         item.forms && h('div', {class: 'ipa'}, 'Forms: ', item.forms),
         h('div', {class: 'translation'}, item.translation_uk),
         h('div', {class: 'muted'}, item.definition_en),
-        (item.family || []).length ? h('div', {style: 'margin-top:12px'},
-          h('span', {class: 'label'}, 'Word family'),
-          h('div', {class: 'family'}, item.family.map((rel) =>
-            h('span', {class: 'fam', title: rel.translation_uk},
-              h('span', null, rel.term), h('span', {class: 'pos'}, rel.part_of_speech))))) : null,
+        [['family', 'Word family'], ['synonyms', 'Synonyms']].map(([key, label]) =>
+          (item[key] || []).length ? h('div', {style: 'margin-top:12px'},
+            h('span', {class: 'label'}, label),
+            h('div', {class: 'family'}, item[key].map((rel) =>
+              h('span', {class: 'fam', title: [rel.translation_uk, rel.note_uk].filter(Boolean).join(' — ')},
+                h('span', null, rel.term),
+                rel.part_of_speech && h('span', {class: 'pos'}, rel.part_of_speech))))) : null),
         examplesList(item.examples)))),
     h('div', {class: 'no-print', style: 'margin-top:24px'},
       h('button', {class: 'btn danger', type: 'button', onclick: async () => {
@@ -701,8 +741,23 @@ function showLesson(m) {
 
 // ---------- Vocabulary ----------
 const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
-let allWords = [], wordKind = '', wordLetter = '';
-const isPhrase = (w) => /\s/.test(w.term.trim());
+const POS_GROUPS = [['noun', 'Nouns'], ['verb', 'Verbs'], ['adjective', 'Adjectives'],
+                    ['adverb', 'Adverbs'], ['phrase', 'Phrases'], ['other', 'Other']];
+/** Частина мови картки; усе багатослівне вважаємо фразою. */
+function posGroup(w) {
+  const pos = (w.part_of_speech || '').toLowerCase();
+  // Порядок важливий: «adverb» містить «verb», «pronoun» містить «noun»
+  if (/phrase|phrasal|idiom|expression|collocation/.test(pos)) return 'phrase';
+  if (/adverb/.test(pos)) return 'adverb';
+  if (/adjective/.test(pos)) return 'adjective';
+  if (/pronoun|preposition|conjunction|determiner|article|interjection|numeral/.test(pos)) return 'other';
+  if (/noun/.test(pos)) return 'noun';
+  if (/verb/.test(pos)) return 'verb';          // сюди ж modal verb і auxiliary verb
+  if (/\s/.test((w.term || '').trim())) return 'phrase';   // без мітки — за кількістю слів
+  return 'other';
+}
+const posLabel = (key) => (POS_GROUPS.find(([k]) => k === key) || [, 'Other'])[1];
+let allWords = [], wordPos = '', wordLetter = '';
 const firstLetter = (w) => {
   const c = w.term.trim()[0] ? w.term.trim()[0].toUpperCase() : '#';
   return LETTERS.includes(c) ? c : '#';
@@ -716,11 +771,37 @@ function fillFilters() {
   };
   fill($('f-category'), 'All categories', meta.categories);
   fill($('f-level'), 'All levels', meta.levels);
+  const keep = $('f-collection').value;
+  $('f-collection').replaceChildren(h('option', {value: ''}, 'All collections'),
+    ...(meta.collections || []).map((c) => h('option', {value: String(c.id)}, `${c.name} (${c.words})`)));
+  $('f-collection').value = (meta.collections || []).some((c) => String(c.id) === keep) ? keep : '';
+}
+/** Чипи колекцій у картці: клік додає або прибирає слово. */
+function collectionsBlock(w) {
+  if (!(meta.collections || []).length) return null;
+  return h('div', {style: 'margin-top:14px'},
+    h('span', {class: 'label'}, 'Collections'),
+    h('div', {class: 'family'}, meta.collections.map((c) => {
+      const inside = () => (w.collections || []).includes(c.id);
+      const mark = h('span', {class: 'go'}, inside() ? '✓' : '+');
+      return h('button', {class: 'fam' + (inside() ? ' on' : ''), type: 'button',
+        onclick: async (e) => {
+          const btn = e.currentTarget, on = inside();
+          btn.disabled = true;
+          try {
+            await api(`/api/words/${w.id}/collections`, {body: {collection_id: c.id, on: !on}});
+            w.collections = on ? w.collections.filter((x) => x !== c.id) : [...(w.collections || []), c.id];
+            btn.classList.toggle('on', !on); mark.textContent = !on ? '✓' : '+';
+            await refreshStats(); fillFilters();  // оновлюємо лічильники в фільтрах
+          } catch (err) { showError($('w-error'), err); }
+          finally { btn.disabled = false; }
+        }}, h('span', null, c.name), mark);
+    })));
 }
 /** Скидає фільтри, відкриває картку слова і підсвічує її. */
 function revealWord(term) {
-  $('f-search').value = ''; $('f-category').value = ''; $('f-level').value = '';
-  wordKind = ''; wordLetter = '';
+  $('f-search').value = ''; $('f-category').value = ''; $('f-level').value = ''; $('f-collection').value = '';
+  wordPos = ''; wordLetter = '';
   renderWords();
   const card = $('words-list').querySelector(`[data-term="${CSS.escape(String(term).toLowerCase())}"]`);
   if (!card) return;
@@ -743,19 +824,37 @@ async function goToRelative(term, chip) {
     showError($('w-error'), err);
   }
 }
-function familyBlock(w) {
-  if (!(w.family || []).length) return null;
+/** Список споріднених слів або синонімів із переходом на них. */
+function relatedBlock(w, key, label) {
+  const items = w[key] || [];
+  if (!items.length) return null;
   return h('div', {style: 'margin-top:14px'},
-    h('span', {class: 'label'}, 'Word family'),
-    h('div', {class: 'family'}, w.family.map((rel) => {
+    h('span', {class: 'label'}, label),
+    h('div', {class: 'family'}, items.map((rel) => {
       const known = !!findWord(rel.term);
+      const hint = [rel.translation_uk, rel.note_uk].filter(Boolean).join(' — ');
       return h('button', {class: 'fam', type: 'button',
-        title: rel.translation_uk + (known ? '' : ' — not in your vocabulary yet, click to add'),
+        title: hint + (known ? '' : ' · not in your vocabulary yet, click to add'),
         onclick: (e) => { e.preventDefault(); goToRelative(rel.term, e.currentTarget); }},
         h('span', null, rel.term),
-        h('span', {class: 'pos'}, rel.part_of_speech),
+        rel.part_of_speech && h('span', {class: 'pos'}, rel.part_of_speech),
         h('span', {class: 'go'}, known ? '→' : '+'));
     })));
+}
+/** Коротка картка (без прикладів) або стара картка без списків — доповнюємо одним запитом. */
+function enrichBlock(w) {
+  const partial = !(w.examples || []).length;
+  if (!partial && ((w.family || []).length || (w.synonyms || []).length)) return null;
+  const status = h('span', {class: 'muted small'});
+  const btn = h('button', {class: 'btn link sm no-print', type: 'button', onclick: async () => {
+    btn.disabled = true; status.textContent = 'Looking…';
+    try {
+      await api(`/api/words/${w.id}/enrich`, {body: {}});
+      await loaders.words();
+      revealWord(w.term);
+    } catch (err) { btn.disabled = false; status.textContent = 'Error: ' + err.message; }
+  }}, partial ? '+ Complete this card' : '+ Find word family and synonyms');
+  return h('div', {class: 'row', style: 'margin-top:14px'}, btn, status);
 }
 function wordCard(w) {
   const pick = (values, current, field) => h('select', {'aria-label': field === 'level' ? 'Level' : 'Category',
@@ -764,15 +863,22 @@ function wordCard(w) {
       await api('/api/words/' + w.id, {body: {[field]: e.target.value}});
       renderWords();
     }}, values.map((v) => h('option', {value: v, selected: v === current}, v)));
+  const partial = !(w.examples || []).length;
   return h('details', {class: 'card word', 'data-term': w.term.toLowerCase()},
-    h('summary', null, h('span', {class: 'term'}, w.term), speakButton(w.term)),
+    h('summary', null, h('span', {class: 'term'}, w.term),
+      partial && h('span', {class: 'chip partial', title: 'Short card: no examples yet'}, 'short'),
+      speakButton(w.term)),
     h('div', {class: 'body'},
       h('div', {class: 'meta'},
         h('div', null, h('span', {class: 'ipa'}, w.transcription), ' ', h('span', {class: 'pos'}, w.part_of_speech)),
         h('div', {class: 'translation'}, w.translation),
         w.forms && h('div', {class: 'ipa', style: 'margin-top:6px'}, 'Forms: ', w.forms),
         w.definition && h('p', {class: 'muted', style: 'margin-top:10px'}, w.definition),
-        familyBlock(w),
+        relatedBlock(w, 'family', 'Word family'),
+        relatedBlock(w, 'synonyms', 'Synonyms'),
+        enrichBlock(w),
+        collectionsBlock(w),
+        noteBox(w),
         h('div', {class: 'row', style: 'margin-top:16px'},
           pick(meta.categories, w.category, 'category'), pick(meta.levels, w.level, 'level'),
           h('button', {class: 'btn danger sm', type: 'button', onclick: async () => {
@@ -781,7 +887,7 @@ function wordCard(w) {
           }}, 'Delete'))),
       h('div', {class: 'ex'}, h('span', {class: 'label'}, 'Examples'), exampleBox(w))));
 }
-/** Приклади картки разом із формою для власних. */
+/** Приклади картки; форма для власного прикладу відкривається кнопкою. */
 function exampleBox(w) {
   const list = h('div', null);
   const error = h('div', {class: 'error small', hidden: true});
@@ -798,26 +904,65 @@ function exampleBox(w) {
     error.hidden = true; addBtn.disabled = true;
     try {
       w.examples = (await api(`/api/words/${w.id}/examples`, {body: {en: en.value, uk: uk.value}})).examples;
-      en.value = ''; uk.value = ''; draw();
+      en.value = ''; uk.value = ''; draw(); en.focus();
     } catch (err) { showError(error, err); }
     finally { addBtn.disabled = false; }
   }}, 'Add example');
   for (const field of [en, uk]) {
     field.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addBtn.click(); } });
   }
+  const form = h('div', {class: 'own-form', hidden: true}, h('div', {class: 'row'}, en, uk, addBtn), error);
+  const toggle = h('button', {class: 'btn link sm no-print', type: 'button', onclick: () => {
+    form.hidden = !form.hidden;
+    toggle.textContent = form.hidden ? '+ Add your own example' : 'Done';
+    if (!form.hidden) en.focus();
+  }}, '+ Add your own example');
   draw();
-  return h('div', null, list,
-    h('div', {class: 'own-form'}, h('div', {class: 'row'}, en, uk, addBtn), error));
+  return h('div', null, list, h('div', {style: 'margin-top:8px'}, toggle), form);
+}
+/** Власна нотатка до слова: кнопка відкриває поле, зберігається при втраті фокуса. */
+function noteBox(w) {
+  const view = h('div', {class: 'note small', hidden: !w.note}, w.note || '');
+  const status = h('span', {class: 'muted small'});
+  const field = h('textarea', {rows: 2, hidden: true, 'aria-label': 'Note about this word',
+                               placeholder: 'Your note: where you met this word, how to remember it…'});
+  field.value = w.note || '';
+  const grow = () => { field.style.height = 'auto'; field.style.height = field.scrollHeight + 'px'; };
+  const label = () => (w.note ? 'Edit note' : '+ Add note');
+  const toggle = h('button', {class: 'btn link sm no-print', type: 'button', onclick: () => {
+    const opening = field.hidden;
+    field.hidden = !opening;
+    view.hidden = opening || !w.note;
+    toggle.textContent = opening ? 'Done' : label();
+    if (opening) { grow(); field.focus(); } else { status.textContent = ''; }
+  }}, label());
+  field.addEventListener('input', () => { grow(); status.textContent = ''; });
+  field.addEventListener('blur', async () => {
+    if (field.value === (w.note || '')) return;
+    status.textContent = 'Saving…';
+    try {
+      await api('/api/words/' + w.id, {body: {note: field.value}});
+      w.note = field.value;
+      view.textContent = w.note;
+      view.hidden = !w.note || !field.hidden;  // поки поле відкрите, текст не дублюємо
+      status.textContent = 'Saved';
+    } catch (err) { status.textContent = 'Error: ' + err.message; }
+  });
+  return h('div', {style: 'margin-top:14px'}, view, field,
+    h('div', {class: 'row', style: 'margin-top:6px'}, toggle, status));
 }
 function renderWords() {
   const q = $('f-search').value.trim().toLowerCase(), cat = $('f-category').value, lvl = $('f-level').value;
-  const base = allWords.filter((w) => (!wordKind || (wordKind === 'phrase') === isPhrase(w)) &&
+  const col = $('f-collection').value;
+  const base = allWords.filter((w) => (!wordPos || posGroup(w) === wordPos) &&
     (!cat || w.category === cat) && (!lvl || w.level === lvl) &&
+    (!col || (w.collections || []).includes(Number(col))) &&
     (!q || w.term.toLowerCase().includes(q) || w.translation.toLowerCase().includes(q)));
-  const phrases = allWords.filter(isPhrase).length;
-  segment($('f-kind'), [['', 'All', allWords.length], ['word', 'Words', allWords.length - phrases],
-                        ['phrase', 'Phrases', phrases]],
-    wordKind, (value) => { wordKind = value; renderWords(); });
+  const counts = {};
+  for (const w of allWords) counts[posGroup(w)] = (counts[posGroup(w)] || 0) + 1;
+  segment($('f-pos'), [['', 'All', allWords.length],
+      ...POS_GROUPS.filter(([key]) => counts[key]).map(([key, label]) => [key, label, counts[key]])],
+    wordPos, (value) => { wordPos = value; renderWords(); });
   const used = new Set(base.map(firstLetter));
   if (wordLetter && !used.has(wordLetter)) wordLetter = '';
   segment($('f-alpha'), [['', 'All', base.length],
@@ -838,7 +983,7 @@ loaders.words = async () => {
     if (!$('cat-panel').hidden) renderCategories();
   } catch (err) { $('words-list').replaceChildren(h('div', {class: 'error'}, 'Error: ' + err.message)); }
 };
-['f-search', 'f-category', 'f-level'].forEach((id) => $(id).addEventListener('input', renderWords));
+['f-search', 'f-category', 'f-level', 'f-collection'].forEach((id) => $(id).addEventListener('input', renderWords));
 $('word-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const term = $('w-term').value.trim();
@@ -850,7 +995,8 @@ $('word-form').addEventListener('submit', async (e) => {
     $('w-term').value = '';
     await loaders.words();
     revealWord(r.term);
-    $('w-note').textContent = r.existed ? `“${r.term}” was already in your vocabulary` : '';
+    $('w-note').textContent = r.existed ? `“${r.term}” was already in your vocabulary`
+      : (r.added || []).length ? `Also added: ${r.added.join(', ')}` : '';
   } catch (err) { showError($('w-error'), err); }
   finally { $('w-submit').disabled = false; $('w-submit').textContent = 'Add card'; }
 });
@@ -902,6 +1048,55 @@ $('cat-toggle').addEventListener('click', async () => {
     } catch (err) { showError($('cat-error'), err); }
   }
 });
+let collections = [];
+function renderCollections() {
+  $('col-list').replaceChildren(...collections.map((c) => {
+    const field = h('input', {type: 'text', value: c.name, 'aria-label': 'Collection name'});
+    const save = async () => {
+      const name = field.value.trim();
+      if (!name || name === c.name) { field.value = c.name; return; }
+      $('col-error').hidden = true;
+      try { await applyCollections(await api('/api/collections/' + c.id, {body: {name}})); }
+      catch (err) { field.value = c.name; showError($('col-error'), err); }
+    };
+    field.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); field.blur(); } });
+    field.addEventListener('blur', save);
+    return h('div', {class: 'cat-row'}, field,
+      h('span', {class: 'muted small'}, `${c.words} ${c.words === 1 ? 'word' : 'words'}`),
+      h('button', {class: 'btn danger sm', type: 'button', onclick: async () => {
+        if (!confirm(`Delete the collection “${c.name}”? The words stay in your vocabulary.`)) return;
+        $('col-error').hidden = true;
+        try { await applyCollections(await api('/api/collections/' + c.id, {method: 'DELETE'})); }
+        catch (err) { showError($('col-error'), err); }
+      }}, 'Delete'));
+  }));
+  if (!collections.length) $('col-list').append(h('div', {class: 'muted small'},
+    'No collections yet. Create one below, then add words to it from their cards.'));
+}
+async function applyCollections(data) {
+  collections = data.collections;
+  meta.collections = collections;
+  renderCollections(); fillFilters();
+  await loaders.words();
+}
+$('col-toggle').addEventListener('click', async () => {
+  const panel = $('col-panel');
+  panel.hidden = !panel.hidden;
+  $('col-toggle').classList.toggle('primary', !panel.hidden);
+  if (!panel.hidden) {
+    $('col-error').hidden = true;
+    try { collections = (await api('/api/collections')).collections; renderCollections(); }
+    catch (err) { showError($('col-error'), err); }
+  }
+});
+$('col-add').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const name = $('col-name').value.trim();
+  if (!name) return;
+  $('col-error').hidden = true;
+  try { await applyCollections(await api('/api/collections', {body: {name}})); $('col-name').value = ''; }
+  catch (err) { showError($('col-error'), err); }
+});
 $('cat-add').addEventListener('submit', async (e) => {
   e.preventDefault();
   const name = $('cat-name').value.trim();
@@ -912,46 +1107,137 @@ $('cat-add').addEventListener('submit', async (e) => {
 });
 
 // ---------- Review ----------
+const SIDES = [['en', 'English'], ['uk', 'Ukrainian'], ['random', 'Random']];
+const GRADES = [[0, "Don't know"], [1, 'Hard'], [2, 'Know it'], [3, 'Easy']];
+let reviewSide = 'en', reviewCollection = '', reviewPos = '', reviewActions = null;
+try { reviewSide = localStorage.getItem('reviewSide') || 'en'; } catch (e) {}
+
+/** Перша сторона картки. */
+function reviewFront(w, side) {
+  if (side === 'uk') return h('div', null, h('div', {class: 'term'}, w.translation));
+  return h('div', null,
+    h('div', {class: 'term'}, w.term, ' ', speakButton(w.term)),
+    h('div', {class: 'ipa'}, w.transcription));
+}
+/** Друга сторона: те, чого не було на першій, плюс подробиці. */
+function reviewBack(w, side) {
+  const detail = [
+    w.forms && h('div', {class: 'ipa', style: 'margin-top:6px'}, 'Forms: ', w.forms),
+    w.definition && h('p', {class: 'muted', style: 'margin-top:8px'}, w.definition),
+    examplesList(w.examples),
+    w.note && h('div', {class: 'note small', style: 'margin-top:12px'}, w.note)];
+  if (side === 'uk') return h('div', {class: 'flip'},
+    h('div', {class: 'term'}, w.term, ' ', speakButton(w.term)),
+    h('div', {class: 'ipa'}, w.transcription, ' ', h('span', {class: 'pos'}, w.part_of_speech)),
+    ...detail);
+  return h('div', {class: 'flip'},
+    h('div', {class: 'term'}, w.translation), ...detail);
+}
+
+$('rv-collection').addEventListener('change', (e) => {
+  reviewCollection = e.target.value;
+  loaders.review();
+});
+$('rv-pos').addEventListener('change', (e) => {
+  reviewPos = e.target.value;
+  loaders.review();
+});
+// Клавіші: пробіл показує відповідь, 1-4 оцінюють, стрілки гортають
+document.addEventListener('keydown', (e) => {
+  if (!$('review').classList.contains('on') || !reviewActions) return;
+  if (/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName)) return;
+  if (e.key === 'ArrowLeft' && reviewActions.move) { e.preventDefault(); reviewActions.move(-1); }
+  else if (e.key === 'ArrowRight' && reviewActions.move) { e.preventDefault(); reviewActions.move(1); }
+  else if ((e.key === ' ' || e.key === 'Enter') && reviewActions.flip) { e.preventDefault(); reviewActions.flip(); }
+  else if (reviewActions.grade && '1234'.includes(e.key)) { e.preventDefault(); reviewActions.grade(Number(e.key) - 1); }
+});
+
 loaders.review = async () => {
   const stage = $('review-stage');
-  let queue = [], done = 0;
-  try { queue = (await api('/api/review')).words; }
-  catch (err) { return stage.replaceChildren(h('div', {class: 'error'}, 'Error: ' + err.message)); }
-  const total = queue.length;
-  function next() {
+  reviewActions = null;
+  segment($('rv-side'), SIDES, reviewSide, (value) => {
+    reviewSide = value;
+    try { localStorage.setItem('reviewSide', value); } catch (err) {}
+    loaders.review();
+  });
+  const keep = $('rv-collection').value;
+  $('rv-collection').replaceChildren(h('option', {value: ''}, 'All words'),
+    ...(meta.collections || []).map((c) => h('option', {value: String(c.id)}, `${c.name} (${c.words})`)));
+  $('rv-collection').value = (meta.collections || []).some((c) => String(c.id) === keep) ? keep : '';
+  reviewCollection = $('rv-collection').value;
+  const keepPos = $('rv-pos').value;
+  $('rv-pos').replaceChildren(h('option', {value: ''}, 'All'),
+    ...POS_GROUPS.map(([key, label]) => h('option', {value: key}, label)));
+  $('rv-pos').value = keepPos; reviewPos = keepPos;
+
+  let cards = [], index = 0, done = 0;
+  const sides = new Map();  // щоб у режимі Random сторона не мінялась, коли гортаєш назад
+  try {
+    const path = '/api/review' + (reviewCollection ? '?collection=' + reviewCollection : '');
+    cards = (await api(path)).words.filter((w) => !reviewPos || posGroup(w) === reviewPos);
+  } catch (err) { return stage.replaceChildren(h('div', {class: 'error'}, 'Error: ' + err.message)); }
+  const total = cards.length;
+
+  const sideFor = (w) => {
+    if (reviewSide !== 'random') return reviewSide;
+    if (!sides.has(w.id)) sides.set(w.id, Math.random() < 0.5 ? 'en' : 'uk');
+    return sides.get(w.id);
+  };
+
+  function show() {
     refreshStats();
-    if (!queue.length) {
+    if (!cards.length) {
+      reviewActions = null;
       return stage.replaceChildren(h('div', {class: 'card'},
         h('h3', null, total ? 'All done for today!' : 'Nothing to review'),
         h('p', {class: 'muted', style: 'margin:0'}, total ? `Cards reviewed: ${done}. Come back tomorrow.`
-          : 'Add words to your vocabulary and they will show up here.')));
+          : (reviewCollection || reviewPos ? 'Nothing is due today with these filters.'
+                                           : 'Add words to your vocabulary and they will show up here.'))));
     }
-    const w = queue[0];
-    const answer = h('div', {class: 'answer', hidden: true},
-      h('div', {class: 'translation', style: 'margin-top:0'}, w.translation),
-      h('div', {class: 'muted'}, w.definition),
-      w.forms && h('div', {class: 'ipa'}, 'Forms: ', w.forms), examplesList(w.examples));
-    const grade = (value) => async () => {
+    index = (index % cards.length + cards.length) % cards.length;
+    const w = cards[index], side = sideFor(w);
+    const back = reviewBack(w, side);
+    back.hidden = true;
+
+    const move = (step) => { index += step; show(); };
+    const grade = async (value) => {
+      reviewActions = null;
       await api('/api/review/' + w.id, {body: {grade: value}});
-      queue.shift(); if (value === 0) queue.push(w); else done++;
-      next();
+      const [card] = cards.splice(index, 1);
+      if (value === 0) cards.push(card); else done++;
+      show();
     };
     const grades = h('div', {class: 'grades', hidden: true},
-      h('button', {class: 'btn', type: 'button', onclick: grade(0)}, "Don't know"),
-      h('button', {class: 'btn', type: 'button', onclick: grade(1)}, 'Hard'),
-      h('button', {class: 'btn', type: 'button', onclick: grade(2)}, 'Know it'),
-      h('button', {class: 'btn', type: 'button', onclick: grade(3)}, 'Easy'));
+      GRADES.map(([value, label]) => h('button', {class: 'btn', type: 'button', onclick: () => grade(value)}, label)));
     const reveal = h('button', {class: 'btn primary', type: 'button', style: 'margin-top:20px',
-      onclick: () => { answer.hidden = false; grades.hidden = false; reveal.hidden = true; }}, 'Show answer');
+      onclick: () => flip()}, 'Show answer');
+    function flip() {
+      back.hidden = false; grades.hidden = false; reveal.hidden = true;
+      reviewActions = {grade, move};
+    }
+    reviewActions = {flip, move};
+
+    const nav = (step, label, title) => h('button', {class: 'btn sm', type: 'button', title,
+      disabled: cards.length < 2, onclick: () => move(step)}, label);
     stage.replaceChildren(
-      h('div', {class: 'muted small', style: 'margin-bottom:10px'}, `Remaining: ${queue.length}`),
+      h('div', {class: 'row rv-nav'},
+        nav(-1, '← Previous', 'Previous card, without grading'),
+        h('span', {class: 'muted small'},
+          `Card ${index + 1} of ${cards.length}` + (done ? ` · ${done} done` : '') +
+          (reviewCollection ? ` · ${$('rv-collection').selectedOptions[0].textContent}` : '') +
+          (reviewPos ? ` · ${posLabel(reviewPos)}` : '')),
+        nav(1, 'Next →', 'Next card, without grading')),
       h('div', {class: 'card'},
         h('div', {class: 'row', style: 'justify-content:center'},
           h('span', {class: 'chip lvl'}, w.level), h('span', {class: 'chip'}, w.category)),
-        h('div', {class: 'term', style: 'margin-top:14px'}, w.term, ' ', speakButton(w.term)),
-        h('div', {class: 'ipa'}, w.transcription), reveal, answer, grades));
+        h('div', {style: 'margin-top:14px'}, reviewFront(w, side)),
+        reveal, back, grades),
+      h('div', {class: 'hint'},
+        h('kbd', null, 'Space'), ' show answer · ',
+        h('kbd', null, '1'), '–', h('kbd', null, '4'), ' grade · ',
+        h('kbd', null, '←'), h('kbd', null, '→'), ' flip through'));
   }
-  next();
+  show();
 };
 
 // ---------- Quiz ----------

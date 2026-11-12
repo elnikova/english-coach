@@ -53,6 +53,9 @@ Rules for items (both lesson types):
   deployment (noun), deployable (adjective). Do not repeat the term itself and do not list
   its grammatical forms (those belong in `forms`). Use an empty list when the word has no
   common relatives.
+- synonyms: 2-4 words or phrases with a close meaning, each with its part of speech, a Ukrainian
+  translation and a short Ukrainian note on how its use differs from the term. Use near-synonyms a
+  learner would actually meet; leave the list empty when the word has no real synonym.
 
 Context of examples:
 - If the source is about programming or IT work, set topic_type to "programming" and take
@@ -94,6 +97,21 @@ ITEM_SCHEMA = {
         "level": {"type": "string", "enum": LEVELS},
         "category": {"type": "string"},  # перелік підставляємо під час запиту
         "examples": {"type": "array", "items": EXAMPLE_SCHEMA},
+        "synonyms": {
+            "type": "array",
+            "description": "Words or phrases with a close meaning",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "term": {"type": "string"},
+                    "part_of_speech": {"type": "string"},
+                    "translation_uk": {"type": "string"},
+                    "note_uk": {"type": "string",
+                                "description": "Short note in Ukrainian on how its use differs"},
+                },
+                "required": ["term", "part_of_speech", "translation_uk", "note_uk"],
+            },
+        },
         "family": {
             "type": "array",
             "description": "Related words from the same root in other parts of speech",
@@ -109,7 +127,7 @@ ITEM_SCHEMA = {
         },
     },
     "required": ["term", "transcription", "part_of_speech", "forms", "translation_uk",
-                 "definition_en", "level", "category", "examples", "family"],
+                 "definition_en", "level", "category", "examples", "family", "synonyms"],
 }
 
 SECTION_SCHEMA = {
@@ -254,6 +272,9 @@ You create one English vocabulary card for a Ukrainian-speaking software develop
   Every example has a Ukrainian translation.
 - family: 2-5 words from the same root in other parts of speech, each with its part of speech and
   a Ukrainian translation. Never the term itself and never its grammatical forms. Empty if none.
+- synonyms: 2-4 words or phrases with a close meaning, each with its part of speech, a Ukrainian
+  translation and a short Ukrainian note on how its use differs from the term. Use near-synonyms a
+  learner would actually meet; leave the list empty when the word has no real synonym.
 - translation_uk in Ukrainian, definition_en in simple English.
 - If the word belongs to programming or IT work, take examples from a developer's working life;
   otherwise show the most common everyday uses.
@@ -345,17 +366,19 @@ def _clean(lesson: dict) -> dict:
              "tense": str(e.get("tense") or ""), "form": str(e.get("form") or "")}
             for e in _dicts(item.get("examples")) if e.get("en")
         ]
-        seen = {str(item["term"]).strip().lower()}
-        family = []
-        for relative in _dicts(item.get("family")):
-            term = str(relative.get("term", "")).strip()
-            if not term or term.lower() in seen:
-                continue
-            seen.add(term.lower())
-            family.append({"term": term,
-                           "part_of_speech": str(relative.get("part_of_speech") or ""),
-                           "translation_uk": str(relative.get("translation_uk") or "")})
-        item["family"] = family
+        for key in ("family", "synonyms"):
+            seen = {str(item["term"]).strip().lower()}
+            related = []
+            for entry in _dicts(item.get(key)):
+                term = str(entry.get("term", "")).strip()
+                if not term or term.lower() in seen:
+                    continue
+                seen.add(term.lower())
+                related.append({"term": term,
+                                "part_of_speech": str(entry.get("part_of_speech") or ""),
+                                "translation_uk": str(entry.get("translation_uk") or ""),
+                                "note_uk": str(entry.get("note_uk") or "")})
+            item[key] = related
         items.append(item)
     lesson["items"] = items
     if lesson.get("level") not in LEVELS:

@@ -32,6 +32,16 @@ CREATE TABLE IF NOT EXISTS categories (
     name TEXT NOT NULL UNIQUE COLLATE NOCASE,
     position INTEGER DEFAULT 100
 );
+CREATE TABLE IF NOT EXISTS collections (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    created_at TEXT DEFAULT (datetime('now', 'localtime'))
+);
+CREATE TABLE IF NOT EXISTS word_collections (
+    word_id INTEGER NOT NULL,
+    collection_id INTEGER NOT NULL,
+    PRIMARY KEY (word_id, collection_id)
+);
 CREATE TABLE IF NOT EXISTS words (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     term TEXT NOT NULL UNIQUE COLLATE NOCASE,
@@ -44,6 +54,8 @@ CREATE TABLE IF NOT EXISTS words (
     category TEXT DEFAULT 'Other',
     examples TEXT DEFAULT '[]',         -- JSON: [{"en": ..., "uk": ...}]
     family TEXT DEFAULT '[]',           -- JSON: споріднені слова інших частин мови
+    synonyms TEXT DEFAULT '[]',         -- JSON: синоніми
+    note TEXT DEFAULT '',               -- власна нотатка до слова
     material_id INTEGER,
     reps INTEGER DEFAULT 0,             -- скільки разів поспіль згадано
     interval_days REAL DEFAULT 0,
@@ -71,6 +83,10 @@ def init() -> None:
             conn.execute("ALTER TABLE words ADD COLUMN forms TEXT DEFAULT ''")
         if "family" not in columns:
             conn.execute("ALTER TABLE words ADD COLUMN family TEXT DEFAULT '[]'")
+        if "note" not in columns:
+            conn.execute("ALTER TABLE words ADD COLUMN note TEXT DEFAULT ''")
+        if "synonyms" not in columns:
+            conn.execute("ALTER TABLE words ADD COLUMN synonyms TEXT DEFAULT '[]'")
         material_columns = {row["name"] for row in conn.execute("PRAGMA table_info(materials)")}
         if "notes" not in material_columns:
             conn.execute("ALTER TABLE materials ADD COLUMN notes TEXT DEFAULT ''")
@@ -202,11 +218,70 @@ def find_word(term: str) -> dict | None:
 def _word(row: dict) -> dict:
     row["examples"] = json.loads(row["examples"] or "[]")
     row["family"] = json.loads(row.get("family") or "[]")
+    row["synonyms"] = json.loads(row.get("synonyms") or "[]")
     return row
 
 
+def _with_collections(rows: list[dict]) -> list[dict]:
+    """Додає до кожного слова список id колекцій, у яких воно є."""
+    members: dict[int, list[int]] = {}
+    for row in query("SELECT word_id, collection_id FROM word_collections"):
+        members.setdefault(row["word_id"], []).append(row["collection_id"])
+    for row in rows:
+        row["collections"] = members.get(row["id"], [])
+    return rows
+
+
 def list_words() -> list[dict]:
-    return [_word(r) for r in query("SELECT * FROM words ORDER BY id DESC")]
+    return _with_collections([_word(r) for r in query("SELECT * FROM words ORDER BY id DESC")])
+
+
+def delete_word(word_id: int) -> None:
+    execute("DELETE FROM word_collections WHERE word_id = ?", (word_id,))
+    execute("DELETE FROM words WHERE id = ?", (word_id,))
+
+
+# ---------- Колекції ----------
+
+def list_collections() -> list[dict]:
+    return query(
+        "SELECT c.id, c.name, COUNT(wc.word_id) AS words FROM collections c"
+        " LEFT JOIN word_collections wc ON wc.collection_id = c.id"
+        " GROUP BY c.id, c.name ORDER BY c.name COLLATE NOCASE")
+
+
+def add_collection(name: str) -> int:
+    return execute("INSERT INTO collections (name) VALUES (?)", (name,))
+
+
+def rename_collection(collection_id: int, name: str) -> bool:
+    if not query("SELECT 1 FROM collections WHERE id = ?", (collection_id,)):
+        return False
+    execute("UPDATE collections SET name = ? WHERE id = ?", (name, collection_id))
+    return True
+
+
+def delete_collection(collection_id: int) -> bool:
+    if not query("SELECT 1 FROM collections WHERE id = ?", (collection_id,)):
+        return False
+    execute("DELETE FROM word_collections WHERE collection_id = ?", (collection_id,))
+    execute("DELETE FROM collections WHERE id = ?", (collection_id,))
+    return True
+
+
+def set_word_collection(word_id: int, collection_id: int, on: bool) -> bool:
+    """Додає слово в колекцію або прибирає з неї."""
+    if not query("SELECT 1 FROM words WHERE id = ?", (word_id,)):
+        return False
+    if not query("SELECT 1 FROM collections WHERE id = ?", (collection_id,)):
+        return False
+    if on:
+        execute("INSERT OR IGNORE INTO word_collections (word_id, collection_id) VALUES (?,?)",
+                (word_id, collection_id))
+    else:
+        execute("DELETE FROM word_collections WHERE word_id = ? AND collection_id = ?",
+                (word_id, collection_id))
+    return True
 
 
 def add_word(item: dict, material_id: int | None = None) -> int | None:
@@ -216,7 +291,7 @@ def add_word(item: dict, material_id: int | None = None) -> int | None:
         return None
     return execute(
         "INSERT INTO words (term, transcription, part_of_speech, forms, translation, definition,"
-        " level, category, examples, family, material_id) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+        " level, category, examples, family, synonyms, material_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
         (
             term,
             item.get("transcription", ""),
@@ -228,6 +303,7 @@ def add_word(item: dict, material_id: int | None = None) -> int | None:
             item.get("category", "Other"),
             json.dumps(item.get("examples", []), ensure_ascii=False),
             json.dumps(item.get("family", []), ensure_ascii=False),
+            json.dumps(item.get("synonyms", []), ensure_ascii=False),
             material_id,
         ),
     )
@@ -258,9 +334,57 @@ def delete_example(word_id: int, index: int) -> list | None:
     return examples
 
 
-def due_words() -> list[dict]:
+def add_light_word(entry: dict, level: str, category: str) -> int | None:
+    """Коротка картка зі споріднених слів: термін, частина мови, переклад.
+    Решту (транскрипцію, приклади) можна доповнити пізніше одним запитом."""
+    term = (entry.get("term") or "").strip()
+    if not term or find_word(term):
+        return None
+    return execute(
+        "INSERT INTO words (term, transcription, part_of_speech, forms, translation, definition,"
+        " level, category, examples, family, synonyms) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+        (term, "", entry.get("part_of_speech", ""), "", entry.get("translation_uk", ""), "",
+         level, category, "[]", "[]", "[]"))
+
+
+def complete_word(word_id: int, item: dict) -> bool:
+    """Доповнює картку свіжими даними, зберігаючи власні приклади й переклад."""
+    rows = query("SELECT * FROM words WHERE id = ?", (word_id,))
+    if not rows:
+        return False
+    current = _word(rows[0])
+    mine = [e for e in current["examples"] if e.get("own")]
+    examples = list(item.get("examples") or []) + mine
+    execute(
+        "UPDATE words SET transcription = ?, part_of_speech = ?, forms = ?, translation = ?,"
+        " definition = ?, examples = ?, family = ?, synonyms = ? WHERE id = ?",
+        (item.get("transcription", ""), item.get("part_of_speech", ""), item.get("forms", ""),
+         current["translation"] or item.get("translation_uk", ""),
+         item.get("definition_en", ""),
+         json.dumps(examples, ensure_ascii=False),
+         json.dumps(item.get("family", []), ensure_ascii=False),
+         json.dumps(item.get("synonyms", []), ensure_ascii=False), word_id))
+    return True
+
+
+def set_related(word_id: int, family: list, synonyms: list) -> bool:
+    """Оновлює лише споріднені слова й синоніми, решту картки не чіпає."""
+    if not query("SELECT 1 FROM words WHERE id = ?", (word_id,)):
+        return False
+    execute("UPDATE words SET family = ?, synonyms = ? WHERE id = ?",
+            (json.dumps(family, ensure_ascii=False), json.dumps(synonyms, ensure_ascii=False), word_id))
+    return True
+
+
+def due_words(collection_id: int | None = None) -> list[dict]:
     today = date.today().isoformat()
-    return [_word(r) for r in query("SELECT * FROM words WHERE due <= ? ORDER BY due, id", (today,))]
+    if collection_id:
+        rows = query(
+            "SELECT w.* FROM words w JOIN word_collections wc ON wc.word_id = w.id"
+            " WHERE wc.collection_id = ? AND w.due <= ? ORDER BY w.due, w.id", (collection_id, today))
+    else:
+        rows = query("SELECT * FROM words WHERE due <= ? ORDER BY due, id", (today,))
+    return _with_collections([_word(r) for r in rows])
 
 
 def grade_word(word_id: int, grade: int) -> None:

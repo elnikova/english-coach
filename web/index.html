@@ -892,14 +892,12 @@ function relatedBlock(w, key, label) {
   return h('div', {style: 'margin-top:14px'},
     h('span', {class: 'label'}, label),
     h('div', {class: 'family'}, items.map((rel) => {
-      const known = !!findWord(rel.term);
       const hint = [rel.translation_uk, rel.note_uk].filter(Boolean).join(' — ');
-      return h('button', {class: 'fam', type: 'button',
-        title: hint + (known ? '' : ' · not in your vocabulary yet, click to add'),
+      return h('button', {class: 'fam', type: 'button', title: hint,
         onclick: (e) => { e.preventDefault(); goToRelative(rel.term, e.currentTarget); }},
         h('span', null, rel.term),
         rel.part_of_speech && h('span', {class: 'pos'}, rel.part_of_speech),
-        h('span', {class: 'go'}, known ? '→' : '+'));
+        h('span', {class: 'go'}, '→'));
     })));
 }
 /** Коротка картка (без прикладів) або стара картка без списків — доповнюємо одним запитом. */

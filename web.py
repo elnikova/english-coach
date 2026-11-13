@@ -8,6 +8,7 @@ import socket
 import threading
 import time
 import webbrowser
+from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -26,6 +27,8 @@ PORT = int((os.getenv("COACH_PORT") or "8000").strip())
 PAGE = Path(__file__).parent / "web" / "index.html"
 MAX_BODY = 14 * 1024 * 1024  # приблизно 10 МБ файлів у base64
 MAX_FILES = 8
+RELATED_LIMIT = 6   # скільки споріднених слів і синонімів створювати разом зі словом
+RELATED_WORKERS = 3  # паралельні запити до моделі, щоб не чекати на них по черзі
 
 coach: EnglishCoach | None = None
 chat_lock = threading.Lock()
@@ -180,12 +183,40 @@ def material_update(material_id, data):
     return {"ok": True}
 
 
+def _card_or_none(term: str) -> dict | None:
+    """Картка для спорідненого слова. Помилка моделі не має зривати основний запит."""
+    try:
+        return build_card(term)
+    except Exception:
+        return None
+
+
 def add_related_words(item: dict) -> list[str]:
-    """Споріднені слова й синоніми одразу стають короткими картками."""
-    added = []
+    """Споріднені слова й синоніми одразу стають повноцінними картками.
+    Третій рівень не розгортаємо: картки для родичів цих слів створюються
+    за кліком — інакше одне слово перетворилося б на лавину запитів."""
+    entries: list[dict] = []
+    seen = {str(item.get("term", "")).strip().lower()}
     for entry in list(item.get("family") or []) + list(item.get("synonyms") or []):
-        if db.add_light_word(entry, item.get("level", "B1"), item.get("category", "Other")):
-            added.append(entry["term"])
+        term = str(entry.get("term", "")).strip()
+        if not term or term.lower() in seen or db.find_word(term):
+            continue
+        seen.add(term.lower())
+        entries.append(entry)
+        if len(entries) >= RELATED_LIMIT:
+            break
+    if not entries:
+        return []
+    with ThreadPoolExecutor(max_workers=RELATED_WORKERS) as pool:
+        cards = list(pool.map(lambda e: _card_or_none(str(e.get("term", "")).strip()), entries))
+
+    added = []
+    for entry, card in zip(entries, cards):
+        if card and db.add_word(card):
+            added.append(card["term"])
+        # Модель не відповіла — лишаємо коротку картку, щоб слово все одно було у словнику
+        elif not card and db.add_light_word(entry, item.get("level", "B1"), item.get("category", "Other")):
+            added.append(str(entry.get("term", "")).strip())
     return added
 
 

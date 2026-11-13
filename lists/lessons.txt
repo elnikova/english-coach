@@ -1,0 +1,34 @@
+# Теми для уроків. Один блок = один урок, блоки розділені порожнім рядком.
+# Агент зробить із кожного урок тієї ж структури, що й з граматичних PDF:
+# правило, таблиця форм, приклади, вправи, поширені помилки.
+#
+#   python add_words.py lists/lessons.txt --lessons
+
+Grammar topic: so (that) ... doesn't — purpose clauses.
+Level A2. How to say why someone does something, when the purpose is to avoid
+something: "She peels off the wrappers slowly so the crunch doesn't give her away."
+Cover: so + subject + verb, so that + subject + verb, the negative form, present
+and past, the difference from "because" (reason vs purpose), and the mistake
+Ukrainian speakers make by translating "щоб не" with "for not".
+
+Grammar topic: remember / see / hear / watch + object + -ing.
+Level A2-B1. "I remember him saying that", not "I remember him to say that".
+Cover: which verbs take object + -ing; the difference between "remember doing"
+(a memory of the past) and "remember to do" (not forgetting a task); why the
+infinitive is wrong after these verbs.
+
+Grammar topic: there is / there are + something + -ing.
+Level A2. "There's something going on", "There were people waiting outside".
+Cover: the structure there + be + noun + -ing, singular and plural, present and
+past, negatives and questions, and how it differs from the plain present
+continuous ("Something is going on").
+
+Grammar topic: the fact that — turning a whole sentence into a noun.
+Level B1. "The fact that nobody noticed surprised her."
+Cover: the fact that + subject + verb as the subject or object of a sentence;
+when it is needed and when "that" alone is enough; common wordiness.
+
+Grammar topic: type of / kind of / sort of + noun.
+Level A2. "These types of errands", "this kind of problem".
+Cover: agreement between this/that/these/those, type/types and the noun that
+follows; singular and plural; when the noun takes an article and when it does not.

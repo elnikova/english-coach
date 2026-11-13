@@ -288,10 +288,13 @@ def card_schema() -> dict:
     return schema
 
 
-def build_card(term: str) -> dict | None:
-    """Картка для одного слова чи фрази."""
-    item = generate_json(CARD_PROMPT, [{"text": f"Make a card for: {term}"}],
-                         card_schema(), max_tokens=3000)
+def build_card(term: str, hint: str = "") -> dict | None:
+    """Картка для одного слова чи фрази. hint — значення, в якому слово
+    трапилося: підказує моделі потрібний відтінок, коли їх кілька."""
+    request = f"Make a card for: {term}"
+    if hint:
+        request += f"\nIn the text it meant: {hint[:200]}. Keep that meaning."
+    item = generate_json(CARD_PROMPT, [{"text": request}], card_schema(), max_tokens=3000)
     return _clean({"items": [item]})["items"][0] if item.get("term") else None
 
 

@@ -240,7 +240,7 @@ def word_create(data):
     existing = db.find_word(term)
     if existing:
         return {"ok": True, "term": existing["term"], "existed": True}
-    item = build_card(term)
+    item = build_card(term, str(data.get("hint", "")).strip())
     if not item:
         raise ApiError(500, "Could not create the card")
     existing = db.find_word(item["term"])

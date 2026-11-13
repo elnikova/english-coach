@@ -257,12 +257,19 @@ def word_update(word_id, data):
         db.execute("UPDATE words SET level = ? WHERE id = ?", (data["level"], word_id))
     if "note" in data:
         db.execute("UPDATE words SET note = ? WHERE id = ?", (str(data["note"])[:2000], word_id))
+    if "learned" in data:
+        db.set_learned(word_id, bool(data["learned"]))
     return {"ok": True}
 
 
 def review_grade(word_id, data):
+    """Повторювати ще — ставимо оцінку й лишаємо в черзі. Вивчив — ховаємо картку."""
+    if data.get("learned"):
+        if not db.set_learned(word_id, True):
+            raise ApiError(404, "Word not found")
+        return {"ok": True, "learned": True}
     db.grade_word(word_id, int(data.get("grade", 0)))
-    return {"ok": True}
+    return {"ok": True, "learned": False}
 
 
 def stats(_=None):

@@ -202,6 +202,8 @@
   .chip.mine { background: var(--accent); color: var(--accent-ink); font-size: 11px; }
   .chip.partial { background: transparent; border: 1px dashed var(--accent-line); color: var(--muted);
                   font-size: 11px; font-weight: 500; }
+  .chip.done { background: transparent; border: 1px solid var(--ok); color: var(--ok);
+               font-size: 11px; font-weight: 600; }
   .own-form { margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--line); }
   .own-form input { font-size: 14.5px; padding: 7px 10px; }
   .notes textarea { min-height: 72px; }
@@ -268,7 +270,11 @@
   .stage .card { padding: 34px 28px; }
   .stage .term { font-size: 32px; }
   .answer { text-align: left; margin-top: 20px; border-top: 1px solid var(--line); padding-top: 16px; }
-  .grades { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 20px; }
+  /* Дві кнопки у верхніх кутах картки повторення */
+  .rv-top { justify-content: space-between; align-items: flex-start; gap: 10px; }
+  .rv-top .btn { white-space: nowrap; }
+  .rv-top .btn.ok { border-color: var(--ok); color: var(--ok); }
+  .rv-top .btn.ok:hover { background: var(--ok); border-color: var(--ok); color: #fff; }
   .options { display: grid; gap: 9px; margin-top: 20px; }
   .options .btn { text-align: left; padding: 12px 16px; border-radius: 12px; }
   .options .right { border-color: var(--ok); color: var(--ok); font-weight: 600; opacity: 1; }
@@ -285,7 +291,7 @@
     nav .theme { margin: 0 0 0 auto; align-self: center; flex: none; }
     nav .theme button { flex: none; padding: 6px 11px; }
     .topbar, .view { padding-left: 16px; padding-right: 16px; }
-    .grades { grid-template-columns: repeat(2, 1fr); }
+    .rv-top { flex-wrap: nowrap; }
   }
   @media print {
     nav, .topbar, .no-print, .speak, #materials-home { display: none !important; }
@@ -372,6 +378,7 @@
       <select id="f-category" aria-label="Category"></select>
       <select id="f-level" aria-label="Level"></select>
       <select id="f-collection" aria-label="Collection"></select>
+      <select id="f-status" aria-label="Learning status"></select>
       <button class="btn" id="cat-toggle" type="button">Categories</button>
       <button class="btn" id="col-toggle" type="button">Collections</button>
     </div>
@@ -903,6 +910,7 @@ function collectionsBlock(w) {
 /** Скидає фільтри, відкриває картку слова і підсвічує її. */
 function revealWord(term) {
   $('f-search').value = ''; $('f-category').value = ''; $('f-level').value = ''; $('f-collection').value = '';
+  $('f-status').value = 'all';  // слово могло бути вже вивченим
   wordPos = ''; wordLetter = '';
   renderWords();
   const card = $('words-list').querySelector(`[data-term="${CSS.escape(String(term).toLowerCase())}"]`);
@@ -964,8 +972,18 @@ function wordCard(w) {
       renderWords();
     }}, values.map((v) => h('option', {value: v, selected: v === current}, v)));
   const partial = !(w.examples || []).length;
+  const learnedToggle = h('button', {class: w.learned ? 'btn sm' : 'btn link sm', type: 'button',
+    title: w.learned ? 'Put it back into the review rotation' : 'Hide it from reviews',
+    onclick: async () => {
+      learnedToggle.disabled = true;
+      try {
+        await api('/api/words/' + w.id, {body: {learned: !w.learned}});
+        await refreshStats(); await loaders.words();
+      } catch (err) { learnedToggle.disabled = false; showError($('w-error'), err); }
+    }}, w.learned ? 'Back to study' : 'Mark as learned');
   return h('details', {class: 'card word', 'data-term': w.term.toLowerCase()},
     h('summary', null, h('span', {class: 'term'}, w.term),
+      w.learned && h('span', {class: 'chip done', title: 'Learned: not shown in reviews'}, 'learned'),
       partial && h('span', {class: 'chip partial', title: 'Short card: no examples yet'}, 'short'),
       speakButton(w.term)),
     h('div', {class: 'body'},
@@ -981,6 +999,7 @@ function wordCard(w) {
         noteBox(w),
         h('div', {class: 'row', style: 'margin-top:16px'},
           pick(meta.categories, w.category, 'category'), pick(meta.levels, w.level, 'level'),
+          learnedToggle,
           h('button', {class: 'btn danger sm', type: 'button', onclick: async () => {
             if (!confirm(`Delete “${w.term}” from your vocabulary?`)) return;
             await api('/api/words/' + w.id, {method: 'DELETE'}); loaders.words();
@@ -1054,7 +1073,15 @@ function noteBox(w) {
 function renderWords() {
   const q = $('f-search').value.trim().toLowerCase(), cat = $('f-category').value, lvl = $('f-level').value;
   const col = $('f-collection').value;
+  // Вивчені слова лишаються в базі, але за замовчуванням не показуються
+  const learned = allWords.filter((w) => w.learned).length;
+  const status = $('f-status').value || 'study';
+  $('f-status').replaceChildren(
+    h('option', {value: 'study', selected: status === 'study'}, `In study (${allWords.length - learned})`),
+    h('option', {value: 'learned', selected: status === 'learned'}, `Learned (${learned})`),
+    h('option', {value: 'all', selected: status === 'all'}, `All (${allWords.length})`));
   const base = allWords.filter((w) => (!wordPos || posGroup(w) === wordPos) &&
+    (status === 'all' || (status === 'learned' ? w.learned : !w.learned)) &&
     (!cat || w.category === cat) && (!lvl || w.level === lvl) &&
     (!col || (w.collections || []).includes(Number(col))) &&
     (!q || w.term.toLowerCase().includes(q) || w.translation.toLowerCase().includes(q)));
@@ -1083,7 +1110,8 @@ loaders.words = async () => {
     if (!$('cat-panel').hidden) renderCategories();
   } catch (err) { $('words-list').replaceChildren(h('div', {class: 'error'}, 'Error: ' + err.message)); }
 };
-['f-search', 'f-category', 'f-level', 'f-collection'].forEach((id) => $(id).addEventListener('input', renderWords));
+['f-search', 'f-category', 'f-level', 'f-collection', 'f-status']
+  .forEach((id) => $(id).addEventListener('input', renderWords));
 $('word-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const term = $('w-term').value.trim();
@@ -1208,7 +1236,6 @@ $('cat-add').addEventListener('submit', async (e) => {
 
 // ---------- Review ----------
 const SIDES = [['en', 'English'], ['uk', 'Ukrainian'], ['random', 'Random']];
-const GRADES = [[0, "Don't know"], [1, 'Hard'], [2, 'Know it'], [3, 'Easy']];
 let reviewSide = 'en', reviewCollection = '', reviewPos = '', reviewActions = null;
 try { reviewSide = localStorage.getItem('reviewSide') || 'en'; } catch (e) {}
 
@@ -1249,7 +1276,8 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'ArrowLeft' && reviewActions.move) { e.preventDefault(); reviewActions.move(-1); }
   else if (e.key === 'ArrowRight' && reviewActions.move) { e.preventDefault(); reviewActions.move(1); }
   else if ((e.key === ' ' || e.key === 'Enter') && reviewActions.flip) { e.preventDefault(); reviewActions.flip(); }
-  else if (reviewActions.grade && '1234'.includes(e.key)) { e.preventDefault(); reviewActions.grade(Number(e.key) - 1); }
+  else if (e.key === '1' && reviewActions.repeat) { e.preventDefault(); reviewActions.repeat(); }
+  else if (e.key === '2' && reviewActions.learned) { e.preventDefault(); reviewActions.learned(); }
 });
 
 loaders.review = async () => {
@@ -1300,22 +1328,29 @@ loaders.review = async () => {
     back.hidden = true;
 
     const move = (step) => { index += step; show(); };
-    const grade = async (value) => {
+    // Повторювати ще — картка лишається в черзі й повертається в кінці кола.
+    const repeat = async () => {
       reviewActions = null;
-      await api('/api/review/' + w.id, {body: {grade: value}});
-      const [card] = cards.splice(index, 1);
-      if (value === 0) cards.push(card); else done++;
+      await api('/api/review/' + w.id, {body: {grade: 0}});
+      cards.push(...cards.splice(index, 1));
       show();
     };
-    const grades = h('div', {class: 'grades', hidden: true},
-      GRADES.map(([value, label]) => h('button', {class: 'btn', type: 'button', onclick: () => grade(value)}, label)));
+    // Вивчив — картка зникає з повторень, але лишається у словнику.
+    const learned = async () => {
+      reviewActions = null;
+      await api('/api/review/' + w.id, {body: {learned: true}});
+      cards.splice(index, 1); done++;
+      show();
+    };
+    const corner = (label, title, action, extra) =>
+      h('button', {class: 'btn sm ' + extra, type: 'button', title, onclick: action}, label);
     const reveal = h('button', {class: 'btn primary', type: 'button', style: 'margin-top:20px',
       onclick: () => flip()}, 'Show answer');
     function flip() {
-      back.hidden = false; grades.hidden = false; reveal.hidden = true;
-      reviewActions = {grade, move};
+      back.hidden = false; reveal.hidden = true;
+      reviewActions = {repeat, learned, move};
     }
-    reviewActions = {flip, move};
+    reviewActions = {flip, repeat, learned, move};
 
     const nav = (step, label, title) => h('button', {class: 'btn sm', type: 'button', title,
       disabled: cards.length < 2, onclick: () => move(step)}, label);
@@ -1328,13 +1363,16 @@ loaders.review = async () => {
           (reviewPos ? ` · ${posLabel(reviewPos)}` : '')),
         nav(1, 'Next →', 'Next card, without grading')),
       h('div', {class: 'card'},
-        h('div', {class: 'row', style: 'justify-content:center'},
-          h('span', {class: 'chip lvl'}, w.level), h('span', {class: 'chip'}, w.category)),
+        h('div', {class: 'row rv-top'},
+          corner('↻ Repeat', 'Keep this word in the rotation', repeat, ''),
+          h('div', {class: 'row'}, h('span', {class: 'chip lvl'}, w.level), h('span', {class: 'chip'}, w.category)),
+          corner('✓ Learned', 'Hide it from reviews — you can bring it back from the vocabulary',
+                 learned, 'ok')),
         h('div', {style: 'margin-top:14px'}, reviewFront(w, side)),
-        reveal, back, grades),
+        reveal, back),
       h('div', {class: 'hint'},
         h('kbd', null, 'Space'), ' show answer · ',
-        h('kbd', null, '1'), '–', h('kbd', null, '4'), ' grade · ',
+        h('kbd', null, '1'), ' repeat · ', h('kbd', null, '2'), ' learned · ',
         h('kbd', null, '←'), h('kbd', null, '→'), ' flip through'));
   }
   show();

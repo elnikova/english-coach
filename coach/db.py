@@ -57,6 +57,7 @@ CREATE TABLE IF NOT EXISTS words (
     synonyms TEXT DEFAULT '[]',         -- JSON: синоніми
     note TEXT DEFAULT '',               -- власна нотатка до слова
     material_id INTEGER,
+    learned INTEGER DEFAULT 0,          -- 1 = вивчено: картка не показується в повтореннях
     reps INTEGER DEFAULT 0,             -- скільки разів поспіль згадано
     interval_days REAL DEFAULT 0,
     ease REAL DEFAULT 2.5,
@@ -87,6 +88,8 @@ def init() -> None:
             conn.execute("ALTER TABLE words ADD COLUMN note TEXT DEFAULT ''")
         if "synonyms" not in columns:
             conn.execute("ALTER TABLE words ADD COLUMN synonyms TEXT DEFAULT '[]'")
+        if "learned" not in columns:
+            conn.execute("ALTER TABLE words ADD COLUMN learned INTEGER DEFAULT 0")
         material_columns = {row["name"] for row in conn.execute("PRAGMA table_info(materials)")}
         if "notes" not in material_columns:
             conn.execute("ALTER TABLE materials ADD COLUMN notes TEXT DEFAULT ''")
@@ -377,14 +380,29 @@ def set_related(word_id: int, family: list, synonyms: list) -> bool:
 
 
 def due_words(collection_id: int | None = None) -> list[dict]:
+    """Слова на сьогодні. Вивчені не повертаємо — вони чекають у словнику."""
     today = date.today().isoformat()
     if collection_id:
         rows = query(
             "SELECT w.* FROM words w JOIN word_collections wc ON wc.word_id = w.id"
-            " WHERE wc.collection_id = ? AND w.due <= ? ORDER BY w.due, w.id", (collection_id, today))
+            " WHERE wc.collection_id = ? AND w.learned = 0 AND w.due <= ?"
+            " ORDER BY w.due, w.id", (collection_id, today))
     else:
-        rows = query("SELECT * FROM words WHERE due <= ? ORDER BY due, id", (today,))
+        rows = query("SELECT * FROM words WHERE learned = 0 AND due <= ? ORDER BY due, id", (today,))
     return _with_collections([_word(r) for r in rows])
+
+
+def set_learned(word_id: int, learned: bool) -> bool:
+    """Позначає слово вивченим або повертає його до списку на вивчення."""
+    if not query("SELECT 1 FROM words WHERE id = ?", (word_id,)):
+        return False
+    if learned:
+        execute("UPDATE words SET learned = 1 WHERE id = ?", (word_id,))
+    else:
+        # Повертаємо з нуля: слово знову з'явиться в повтореннях сьогодні
+        execute("UPDATE words SET learned = 0, reps = 0, interval_days = 0, ease = 2.5, due = ?"
+                " WHERE id = ?", (date.today().isoformat(), word_id))
+    return True
 
 
 def grade_word(word_id: int, grade: int) -> None:

@@ -746,7 +746,8 @@ function showLesson(m) {
       refreshStats();
     } catch (err) { status.textContent = 'Error: ' + err.message; button.disabled = false; }
   }
-  box.replaceChildren(
+  // replaceChildren, на відміну від h(), перетворив би null на текст «null» — тож фільтруємо
+  const parts = [
     h('div', {class: 'row no-print', style: 'justify-content:space-between'},
       h('button', {class: 'btn link', type: 'button', onclick: loaders.materials}, '← Back to lessons'),
       h('button', {class: 'btn', type: 'button', onclick: () => window.print()}, 'Print / save as PDF')),
@@ -795,7 +796,9 @@ function showLesson(m) {
       h('button', {class: 'btn danger', type: 'button', onclick: async () => {
         if (!confirm('Delete this lesson? Words already added to your vocabulary stay.')) return;
         await api('/api/materials/' + m.id, {method: 'DELETE'}); refreshStats(); loaders.materials();
-      }}, 'Delete lesson')));
+      }}, 'Delete lesson')),
+  ];
+  box.replaceChildren(...parts.filter((node) => node != null));
   activate('materials');
   $('materials-home').hidden = true; box.hidden = false; $('scroll').scrollTop = 0;
 }

@@ -3,9 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#faf8ff">
 <title>English Coach</title>
 <style>
   :root {
+    color-scheme: light;
     --bg: #faf8ff; --panel: #ffffff; --ink: #2b2543; --muted: #7a7398;
     --line: #ece6fa; --side: #f1ecfc; --side-ink: #514879; --side-hover: #e7dffb;
     --accent: #8b6fd4; --accent-ink: #ffffff; --accent-soft: #f3eefd; --accent-line: #dccdf7;
@@ -14,14 +16,25 @@
     --shadow-lg: 0 2px 6px rgba(74,48,138,.07), 0 16px 44px rgba(74,48,138,.11);
     --r: 14px;
   }
+  /* Темна тема: за налаштуванням системи, якщо користувач не обрав вручну. */
   @media (prefers-color-scheme: dark) {
-    :root {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
       --bg: #131120; --panel: #1c1930; --ink: #ebe7f7; --muted: #a098bd;
       --line: #2d2747; --side: #181528; --side-ink: #bdb3da; --side-hover: #251f3c;
       --accent: #a98ee8; --accent-ink: #1b1530; --accent-soft: #272040; --accent-line: #413663;
       --me: #6b53b0; --ok: #5cbf95; --bad: #e87a7a;
       --shadow: 0 1px 2px rgba(0,0,0,.3); --shadow-lg: 0 16px 44px rgba(0,0,0,.45);
     }
+  }
+  /* Вибір перемикачем має перевагу над налаштуванням системи. */
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #131120; --panel: #1c1930; --ink: #ebe7f7; --muted: #a098bd;
+    --line: #2d2747; --side: #181528; --side-ink: #bdb3da; --side-hover: #251f3c;
+    --accent: #a98ee8; --accent-ink: #1b1530; --accent-soft: #272040; --accent-line: #413663;
+    --me: #6b53b0; --ok: #5cbf95; --bad: #e87a7a;
+    --shadow: 0 1px 2px rgba(0,0,0,.3); --shadow-lg: 0 16px 44px rgba(0,0,0,.45);
   }
   * { box-sizing: border-box; }
   [hidden] { display: none !important; }
@@ -51,6 +64,15 @@
            border-radius: 20px; font-size: 11.5px; font-weight: 600; padding: 0 7px; min-width: 22px; text-align: center; }
   nav button.on .badge { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
   nav .foot { margin-top: auto; font-size: 12px; color: var(--muted); padding: 0 12px; }
+  nav .theme { display: flex; gap: 2px; margin: 12px 0 0; padding: 3px;
+               border-radius: 999px; background: var(--side-hover); }
+  nav .theme button { all: unset; cursor: pointer; flex: 1; padding: 6px 0; border-radius: 999px;
+                      text-align: center; font-size: 13px; color: var(--side-ink);
+                      transition: background .15s, color .15s; }
+  nav .theme button:hover { color: var(--ink); }
+  nav .theme button.sel { background: var(--panel); color: var(--accent);
+                          font-weight: 600; box-shadow: var(--shadow); }
+  nav .theme button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
   /* Main */
   main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
@@ -259,6 +281,8 @@
           border-bottom: 1px solid var(--line); }
     nav .brand, nav .foot { display: none; }
     nav button { white-space: nowrap; gap: 6px; }
+    nav .theme { margin: 0 0 0 auto; align-self: center; flex: none; }
+    nav .theme button { flex: none; padding: 6px 11px; }
     .topbar, .view { padding-left: 16px; padding-right: 16px; }
     .grades { grid-template-columns: repeat(2, 1fr); }
   }
@@ -271,6 +295,13 @@
     .key::before { content: 'Answer key'; display: block; font-weight: 600; column-span: all; }
   }
 </style>
+<script>
+  /* До першої відмальовки — щоб темна тема не блимала білим. */
+  try {
+    const saved = localStorage.getItem('coach-theme');
+    if (saved === 'light' || saved === 'dark') document.documentElement.dataset.theme = saved;
+  } catch (e) {}
+</script>
 </head>
 <body>
 <nav id="nav">
@@ -282,6 +313,10 @@
   <button data-view="quiz">Quiz</button>
   <button data-view="chat">Coach</button>
   <div class="foot">Everything is stored locally in the data folder</div>
+  <div class="theme" role="group" aria-label="Colour theme">
+    <button type="button" data-theme-set="light" title="Light theme">☀ Light</button>
+    <button type="button" data-theme-set="dark" title="Dark theme">☾ Dark</button>
+  </div>
 </nav>
 
 <main>
@@ -483,13 +518,39 @@ let meta = {categories: [], levels: []};
 const loaders = {};
 function activate(view) {
   document.querySelectorAll('.view').forEach((s) => s.classList.toggle('on', s.id === view));
-  document.querySelectorAll('#nav button').forEach((b) => b.classList.toggle('on', b.dataset.view === view));
+  document.querySelectorAll('#nav button[data-view]').forEach((b) => b.classList.toggle('on', b.dataset.view === view));
   const [title, sub] = TITLES[view] || ['English Coach', ''];
   $('view-title').textContent = title; $('view-sub').textContent = sub;
   try { localStorage.setItem('view', view); } catch (e) {}
 }
 function openView(view) { activate(view); $('scroll').scrollTop = 0; if (loaders[view]) loaders[view](); }
-document.querySelectorAll('#nav button').forEach((b) => b.addEventListener('click', () => openView(b.dataset.view)));
+document.querySelectorAll('#nav button[data-view]').forEach((b) => b.addEventListener('click', () => openView(b.dataset.view)));
+
+// ---------- Theme ----------
+const systemDark = window.matchMedia('(prefers-color-scheme: dark)');
+function themeNow() {
+  const picked = document.documentElement.dataset.theme;
+  if (picked === 'light' || picked === 'dark') return picked;
+  return systemDark.matches ? 'dark' : 'light';
+}
+function markTheme() {
+  const now = themeNow();
+  document.querySelectorAll('[data-theme-set]').forEach((b) => {
+    const on = b.dataset.themeSet === now;
+    b.classList.toggle('sel', on);
+    b.setAttribute('aria-pressed', on ? 'true' : 'false');
+  });
+  const bar = document.querySelector('meta[name="theme-color"]');  // колір рядка браузера на телефоні
+  if (bar) bar.content = now === 'dark' ? '#131120' : '#faf8ff';
+}
+document.querySelectorAll('[data-theme-set]').forEach((b) => b.addEventListener('click', () => {
+  const mode = b.dataset.themeSet;
+  document.documentElement.dataset.theme = mode;
+  try { localStorage.setItem('coach-theme', mode); } catch (e) {}
+  markTheme();
+}));
+systemDark.addEventListener('change', markTheme);
+markTheme();
 async function refreshStats() {
   try {
     meta = await api('/api/stats');

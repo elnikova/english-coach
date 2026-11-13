@@ -178,6 +178,7 @@
   .examples .uk { color: var(--muted); font-size: 14px; margin-top: 2px; }
   .speak { all: unset; cursor: pointer; font-size: 14px; padding: 0 4px; opacity: .55; transition: opacity .12s; }
   .speak:hover { opacity: 1; }
+  .speak.on { opacity: 1; color: var(--accent); }
   .speak:focus-visible { outline: 2px solid var(--accent); border-radius: 4px; opacity: 1; }
 
   /* Materials grouped by level */
@@ -466,14 +467,51 @@ async function api(path, options = {}) {
   return data;
 }
 function showError(node, err) { node.textContent = 'Error: ' + err.message; node.hidden = false; }
-function speak(text) {
-  if (!('speechSynthesis' in window)) return;
-  const voice = new SpeechSynthesisUtterance(text);
-  voice.lang = 'en-GB'; speechSynthesis.cancel(); speechSynthesis.speak(voice);
+/* Вимова. На телефонах список голосів приходить із затримкою, а speak()
+   одразу після cancel() часто ковтається — тому голос добираємо окремо,
+   а скасовуємо попередню фразу тільки якщо вона справді звучить. */
+const canSpeak = 'speechSynthesis' in window;
+if (canSpeak) {
+  speechSynthesis.getVoices();  // підштовхуємо браузер завантажити список
+  speechSynthesis.addEventListener('voiceschanged', () => {});
+}
+function englishVoice() {
+  const voices = (canSpeak && speechSynthesis.getVoices()) || [];
+  const en = (code) => voices.find((v) => (v.lang || '').replace('_', '-').toLowerCase().startsWith(code));
+  return en('en-gb') || en('en-us') || en('en') || null;
+}
+function speak(text, button) {
+  if (!canSpeak || !text) return;
+  const say = () => {
+    const phrase = new SpeechSynthesisUtterance(String(text));
+    const voice = englishVoice();
+    phrase.lang = voice ? voice.lang : 'en-GB';
+    if (voice) phrase.voice = voice;
+    phrase.rate = 0.95;
+    let started = false;
+    phrase.onstart = () => { started = true; if (button) button.classList.add('on'); };
+    phrase.onend = phrase.onerror = () => { if (button) button.classList.remove('on'); };
+    // Мовчазна відмова: на телефоні може не бути англійського голосу
+    setTimeout(() => {
+      if (started || !button) return;
+      button.textContent = '⚠';
+      button.title = 'The browser has no English voice. Android: Settings → Languages & input'
+                   + ' → Text-to-speech → install English. iPhone: Settings → Accessibility → Spoken Content.';
+      setTimeout(() => { button.textContent = '🔊'; }, 4000);
+    }, 1200);
+    speechSynthesis.resume();  // якщо рушій завис у паузі
+    speechSynthesis.speak(phrase);
+  };
+  if (speechSynthesis.speaking || speechSynthesis.pending) {
+    speechSynthesis.cancel();
+    setTimeout(say, 120);
+  } else {
+    say();
+  }
 }
 function speakButton(text) {
   return h('button', {class: 'speak', type: 'button', title: 'Pronunciation', 'aria-label': 'Play pronunciation',
-                      onclick: (e) => { e.stopPropagation(); e.preventDefault(); speak(text); }}, '🔊');
+                      onclick: (e) => { e.stopPropagation(); e.preventDefault(); speak(text, e.currentTarget); }}, '🔊');
 }
 function examplesList(examples, onDelete) {
   return h('ul', {class: 'examples'}, (examples || []).map((ex, i) => {

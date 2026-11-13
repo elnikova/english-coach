@@ -206,6 +206,10 @@
                   font-size: 11px; font-weight: 500; }
   .chip.done { background: transparent; border: 1px solid var(--ok); color: var(--ok);
                font-size: 11px; font-weight: 600; }
+  /* Журнал додавання списку слів */
+  #list-log { max-height: 260px; overflow-y: auto; gap: 4px; }
+  #list-log .ok-line { color: var(--ok); }
+  #list-log .bad-line { color: var(--bad); }
   .own-form { margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--line); }
   .own-form input { font-size: 14.5px; padding: 7px 10px; }
   .notes textarea { min-height: 72px; }
@@ -352,6 +356,21 @@
       <div class="error" id="m-error" hidden></div>
     </form>
     <div class="card" id="m-result" hidden style="margin-top:16px"></div>
+
+    <form class="card" id="list-form" style="margin-top:16px">
+      <label for="list-text">Word list</label>
+      <span class="label-text">One word or phrase per line. After a dash you can add what it meant
+        in your text, and the card will keep that meaning.</span>
+      <textarea id="list-text" placeholder="errand &mdash; доручення&#10;by and large &mdash; загалом&#10;peel off &mdash; знімати, віддирати"></textarea>
+      <div class="row" style="margin-top:16px">
+        <button class="btn primary" id="list-submit" type="submit">Add to vocabulary</button>
+        <button class="btn" id="list-stop" type="button" hidden>Stop</button>
+        <span class="muted small" id="list-status"></span>
+      </div>
+      <div class="progress" id="list-bar" hidden><i style="width:0"></i></div>
+      <div class="stack small" id="list-log" style="margin-top:12px"></div>
+      <div class="error" id="list-error" hidden></div>
+    </form>
   </section>
 
   <!-- Materials -->
@@ -646,6 +665,66 @@ $('material-form').addEventListener('submit', async (e) => {
   } catch (err) { showError($('m-error'), err); }
   finally { $('m-submit').disabled = false; $('m-status').textContent = ''; }
 });
+/* Список слів зі статті. Кожен рядок — окреме звернення до моделі, тому
+   між ними пауза: безкоштовний Gemini дозволяє близько 10 запитів за хвилину.
+   Слово, яке вже у словнику, моделі не коштує нічого — його не чекаємо. */
+const LIST_PAUSE = 12000;
+let listStop = false;
+
+function parseWordList(text) {
+  return text.split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line && !line.startsWith('#'))
+    .map((line) => {
+      const match = line.match(/^(.+?)\s+[—–-]\s+(.*)$/);
+      return match ? {term: match[1].trim(), hint: match[2].trim()} : {term: line, hint: ''};
+    })
+    .filter((entry) => entry.term);
+}
+
+$('list-stop').addEventListener('click', () => { listStop = true; $('list-stop').disabled = true; });
+
+$('list-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  $('list-error').hidden = true;
+  const entries = parseWordList($('list-text').value);
+  if (!entries.length) return showError($('list-error'), new Error('paste a list of words first'));
+
+  listStop = false;
+  const log = $('list-log'), bar = $('list-bar');
+  log.replaceChildren(); bar.hidden = false;
+  $('list-submit').disabled = true;
+  $('list-stop').hidden = false; $('list-stop').disabled = false;
+
+  const note = (text, kind) => log.prepend(h('div', {class: kind}, text));
+  let created = 0, known = 0, failed = 0;
+
+  for (let i = 0; i < entries.length; i++) {
+    if (listStop) { note('Stopped.', 'muted'); break; }
+    const {term, hint} = entries[i];
+    $('list-status').textContent = `${i + 1} of ${entries.length} · ${term}`;
+    bar.firstChild.style.width = `${(i / entries.length) * 100}%`;
+    let spent = false;
+    try {
+      const res = await api('/api/words', {body: {term, hint}});
+      if (res.existed) { known++; note(`${res.term} — already in your vocabulary`, 'muted'); }
+      else {
+        created++; spent = true;
+        const extra = (res.added || []).length ? ` · with it: ${res.added.join(', ')}` : '';
+        note(`${res.term}${extra}`, 'ok-line');
+      }
+    } catch (err) { failed++; spent = true; note(`${term} — ${err.message}`, 'bad-line'); }
+    // Пауза лише після справжнього запиту до моделі й не після останнього слова
+    if (spent && i < entries.length - 1 && !listStop) await new Promise((r) => setTimeout(r, LIST_PAUSE));
+  }
+
+  bar.firstChild.style.width = '100%';
+  $('list-status').textContent = `Added ${created}` + (known ? `, already there ${known}` : '')
+                               + (failed ? `, failed ${failed}` : '');
+  $('list-submit').disabled = false; $('list-stop').hidden = true;
+  if (created) refreshStats();
+});
+
 /** Матеріал без граматики: слова пішли просто у словник. */
 function showWordsResult(res) {
   const group = (title, terms) => terms.length ? h('div', {style: 'margin-top:12px'},

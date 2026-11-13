@@ -167,6 +167,8 @@
          border-radius: 20px; padding: 4px 12px; transition: background .12s, border-color .12s; }
   .fam:hover:not(:disabled) { background: var(--accent-soft); border-color: var(--accent); }
   .fam:disabled { opacity: .6; cursor: default; }
+  .fam.flat { cursor: default; }
+  .fam.flat:hover { background: var(--panel); border-color: var(--accent-line); }
   .fam .pos { font-size: 11.5px; }
   .fam .go { color: var(--accent); font-weight: 700; }
   .label { display: block; font-size: 11.5px; letter-spacing: .07em; text-transform: uppercase;
@@ -1247,11 +1249,25 @@ function reviewFront(w, side) {
     h('div', {class: 'ipa'}, w.transcription));
 }
 /** Друга сторона: те, чого не було на першій, плюс подробиці. */
+/* Споріднені слова на звороті картки. Без переходів: клік забрав би
+   з повторення, а тут вони потрібні лише щоб побачити їх поряд зі словом. */
+function relatedList(w, key, label) {
+  const items = w[key] || [];
+  if (!items.length) return null;
+  return h('div', {style: 'margin-top:14px'},
+    h('span', {class: 'label'}, label),
+    h('div', {class: 'family'}, items.map((rel) =>
+      h('span', {class: 'fam flat', title: rel.translation_uk || ''},
+        h('span', null, rel.term),
+        rel.part_of_speech && h('span', {class: 'pos'}, rel.part_of_speech)))));
+}
 function reviewBack(w, side) {
   const detail = [
     w.forms && h('div', {class: 'ipa', style: 'margin-top:6px'}, 'Forms: ', w.forms),
     w.definition && h('p', {class: 'muted', style: 'margin-top:8px'}, w.definition),
     examplesList(w.examples),
+    relatedList(w, 'family', 'Word family'),
+    relatedList(w, 'synonyms', 'Synonyms'),
     w.note && h('div', {class: 'note small', style: 'margin-top:12px'}, w.note)];
   if (side === 'uk') return h('div', {class: 'flip'},
     h('div', {class: 'term'}, w.term, ' ', speakButton(w.term)),

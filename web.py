@@ -2,7 +2,9 @@
 
 import base64
 import json
+import os
 import re
+import socket
 import threading
 import time
 import webbrowser
@@ -18,7 +20,9 @@ from coach.agent import EnglishCoach  # noqa: E402
 from coach.quiz import build_quiz  # noqa: E402
 from coach.tutor import LEVELS, build_card, build_lesson, categories, detect_kind  # noqa: E402
 
-HOST, PORT = "127.0.0.1", 8000
+# 127.0.0.1 — лише цей комп'ютер. 0.0.0.0 — ще й інші ваші пристрої через Tailscale.
+HOST = (os.getenv("COACH_HOST") or "127.0.0.1").strip()
+PORT = int((os.getenv("COACH_PORT") or "8000").strip())
 PAGE = Path(__file__).parent / "web" / "index.html"
 MAX_BODY = 14 * 1024 * 1024  # приблизно 10 МБ файлів у base64
 MAX_FILES = 8
@@ -386,8 +390,11 @@ class Handler(BaseHTTPRequestHandler):
 def main():
     db.init()
     server = ThreadingHTTPServer((HOST, PORT), Handler)
-    url = f"http://{HOST}:{PORT}"
+    url = f"http://127.0.0.1:{PORT}"
     print(f"English Coach is running at {url}  (stop: Ctrl+C)")
+    if HOST == "0.0.0.0":
+        name = socket.gethostname().lower()
+        print(f"From your other devices (Tailscale): http://{name}:{PORT}")
     webbrowser.open(url)
     try:
         server.serve_forever()

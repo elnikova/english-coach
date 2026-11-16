@@ -203,7 +203,8 @@ def word_enrich(word_id, _=None):
     if not item:
         raise ApiError(500, "Could not complete the card")
     db.complete_word(word_id, item)
-    return {"ok": True, "added": add_related_words(item)}
+    added = add_related_words(item)
+    return {"ok": True, "added": added, "word": db.get_word(word_id)}
 
 
 def example_add(word_id, data):

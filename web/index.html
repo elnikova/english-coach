@@ -1069,6 +1069,15 @@ function collectionsBlock(w) {
         }}, h('span', null, c.name), mark);
     })));
 }
+/* Перемальовує одну картку на місці. Весь список не чіпаємо: інакше
+   картка згорнулася б, а сторінка поїхала б угору. */
+function refreshCard(node, w) {
+  if (!node) return null;
+  const fresh = wordCard(w);
+  fresh.open = node.open;
+  node.replaceWith(fresh);
+  return fresh;
+}
 /** Скидає фільтри, відкриває картку слова і підсвічує її. */
 function revealWord(term) {
   $('f-search').value = ''; $('f-category').value = ''; $('f-level').value = ''; $('f-collection').value = '';
@@ -1117,11 +1126,13 @@ function enrichBlock(w) {
   if (!partial && ((w.family || []).length || (w.synonyms || []).length)) return null;
   const status = h('span', {class: 'muted small'});
   const btn = h('button', {class: 'btn link sm no-print', type: 'button', onclick: async () => {
+    const node = btn.closest('.word');
     btn.disabled = true; status.textContent = 'Looking…';
     try {
-      await api(`/api/words/${w.id}/enrich`, {body: {}});
-      await loaders.words();
-      revealWord(w.term);
+      const res = await api(`/api/words/${w.id}/enrich`, {body: {}});
+      Object.assign(w, res.word || {});
+      refreshStats();
+      refreshCard(node, w);
     } catch (err) { btn.disabled = false; status.textContent = 'Error: ' + err.message; }
   }}, partial ? '+ Complete this card' : '+ Find word family and synonyms');
   return h('div', {class: 'row', style: 'margin-top:14px'}, btn, status);
@@ -1244,17 +1255,21 @@ function wordCard(w) {
     onchange: async (e) => {
       w[field] = e.target.value;
       await api('/api/words/' + w.id, {body: {[field]: e.target.value}});
-      renderWords();
+      // Список не перемальовуємо: селект уже показує нове значення,
+      // а картка має лишитися розгорнутою там, де стоїть.
     }}, values.map((v) => h('option', {value: v, selected: v === current}, v)));
   const partial = !(w.examples || []).length;
   const details = detailsEditor(w);
   const learnedToggle = h('button', {class: w.learned ? 'btn sm' : 'btn link sm', type: 'button',
     title: w.learned ? 'Put it back into the review rotation' : 'Hide it from reviews',
     onclick: async () => {
+      const node = learnedToggle.closest('.word');
       learnedToggle.disabled = true;
       try {
-        await api('/api/words/' + w.id, {body: {learned: !w.learned}});
-        await refreshStats(); await loaders.words();
+        const res = await api('/api/words/' + w.id, {body: {learned: !w.learned}});
+        Object.assign(w, res.word || {learned: w.learned ? 0 : 1});
+        refreshStats();
+        refreshCard(node, w);     // змінюється позначка learned і напис на кнопці
       } catch (err) { learnedToggle.disabled = false; showError($('w-error'), err); }
     }}, w.learned ? 'Back to study' : 'Mark as learned');
   return h('details', {class: 'card word', 'data-term': w.term.toLowerCase()},

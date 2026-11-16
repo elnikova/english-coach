@@ -300,6 +300,10 @@
                border: 1px solid var(--accent); background: var(--bg); color: var(--text);
                flex: 1; min-width: 0; max-width: 420px; }
   @media (hover: none) { .word > summary .pencil { opacity: .6; } }
+  /* Колекції слова */
+  .collections .family { margin-bottom: 6px; }
+  .coll-pick { margin-top: 8px; }
+  .coll-pick select { width: 100%; font: inherit; padding: 6px; }
   /* Форма правки картки у словнику */
   .edit-form { display: grid; gap: 10px; margin: 2px 0 4px; }
   .edit-row { display: grid; gap: 4px; }
@@ -1048,26 +1052,63 @@ function fillFilters() {
   $('f-collection').value = (meta.collections || []).some((c) => String(c.id) === keep) ? keep : '';
 }
 /** Чипи колекцій у картці: клік додає або прибирає слово. */
+/* Колекції слова. Згорнуто показуємо лише ті, у яких слово вже є;
+   повний список відкривається кнопкою, бо колекцій може бути багато,
+   а дивитися на них щоразу не треба. */
 function collectionsBlock(w) {
-  if (!(meta.collections || []).length) return null;
-  return h('div', {style: 'margin-top:14px'},
-    h('span', {class: 'label'}, 'Collections'),
-    h('div', {class: 'family'}, meta.collections.map((c) => {
-      const inside = () => (w.collections || []).includes(c.id);
-      const mark = h('span', {class: 'go'}, inside() ? '✓' : '+');
-      return h('button', {class: 'fam' + (inside() ? ' on' : ''), type: 'button',
-        onclick: async (e) => {
-          const btn = e.currentTarget, on = inside();
-          btn.disabled = true;
-          try {
-            await api(`/api/words/${w.id}/collections`, {body: {collection_id: c.id, on: !on}});
-            w.collections = on ? w.collections.filter((x) => x !== c.id) : [...(w.collections || []), c.id];
-            btn.classList.toggle('on', !on); mark.textContent = !on ? '✓' : '+';
-            await refreshStats(); fillFilters();  // оновлюємо лічильники в фільтрах
-          } catch (err) { showError($('w-error'), err); }
-          finally { btn.disabled = false; }
-        }}, h('span', null, c.name), mark);
-    })));
+  const all = meta.collections || [];
+  if (!all.length) return null;
+  const mine = () => all.filter((c) => (w.collections || []).includes(c.id));
+
+  const chips = h('div', {class: 'family'});
+  const draw = () => {
+    const inside = mine();
+    chips.replaceChildren(...inside.map((c) => h('span', {class: 'fam flat'}, c.name)));
+    chips.hidden = !inside.length;
+    button.textContent = inside.length ? '+ Change collections' : '+ Add to collection';
+  };
+
+  // size мінімум 3, щоб селект одразу читався як список з вибором кількох,
+  // а не як звичайний випадайний
+  const select = h('select', {multiple: true, size: Math.min(Math.max(all.length, 3), 6),
+    'aria-label': 'Collections for this word'},
+    all.map((c) => h('option', {value: String(c.id)}, `${c.name} (${c.words})`)));
+  const saveBtn = h('button', {class: 'btn primary sm', type: 'button', onclick: () => save()}, 'Save');
+  const form = h('div', {class: 'coll-pick', hidden: true}, select,
+    h('p', {class: 'muted small', style: 'margin:6px 0 0'},
+      'Hold Ctrl (⌘ on a Mac) to pick more than one.'),
+    h('div', {class: 'row', style: 'margin-top:10px'}, saveBtn,
+      h('button', {class: 'btn link sm', type: 'button', onclick: () => close()}, 'Cancel')));
+
+  function open() {
+    const inside = (w.collections || []);
+    for (const option of select.options) option.selected = inside.includes(Number(option.value));
+    form.hidden = false; button.disabled = true;
+  }
+  function close() { form.hidden = true; button.disabled = false; }
+  async function save() {
+    const wanted = [...select.selectedOptions].map((o) => Number(o.value));
+    const now = w.collections || [];
+    const changes = [...all.filter((c) => wanted.includes(c.id) && !now.includes(c.id))
+                            .map((c) => [c.id, true]),
+                     ...all.filter((c) => !wanted.includes(c.id) && now.includes(c.id))
+                            .map((c) => [c.id, false])];
+    saveBtn.disabled = true;
+    try {
+      for (const [id, on] of changes) {
+        await api(`/api/words/${w.id}/collections`, {body: {collection_id: id, on}});
+      }
+      w.collections = wanted;
+      draw(); close();
+      await refreshStats(); fillFilters();   // лічильники в фільтрах і в списку колекцій
+    } catch (err) { showError($('w-error'), err); }
+    saveBtn.disabled = false;
+  }
+
+  const button = h('button', {class: 'btn link sm', type: 'button', onclick: () => open()}, '');
+  draw();
+  return h('div', {class: 'collections', style: 'margin-top:18px'},
+    h('span', {class: 'label'}, 'Collections'), chips, button, form);
 }
 /* Перемальовує одну картку на місці. Весь список не чіпаємо: інакше
    картка згорнулася б, а сторінка поїхала б угору. */
@@ -1284,7 +1325,6 @@ function wordCard(w) {
         relatedBlock(w, 'family', 'Word family'),
         relatedBlock(w, 'synonyms', 'Synonyms'),
         enrichBlock(w),
-        collectionsBlock(w),
         noteBox(w),
         h('div', {class: 'row', style: 'margin-top:16px'},
           pick(meta.categories, w.category, 'category'), pick(meta.levels, w.level, 'level'),
@@ -1292,7 +1332,8 @@ function wordCard(w) {
           h('button', {class: 'btn danger sm', type: 'button', onclick: async () => {
             if (!confirm(`Delete “${w.term}” from your vocabulary?`)) return;
             await api('/api/words/' + w.id, {method: 'DELETE'}); loaders.words();
-          }}, 'Delete'))),
+          }}, 'Delete')),
+        collectionsBlock(w)),
       h('div', {class: 'ex'}, h('span', {class: 'label'}, 'Examples'), exampleBox(w))));
 }
 /** Приклади картки; форма для власного прикладу відкривається кнопкою. */

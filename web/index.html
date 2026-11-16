@@ -289,6 +289,17 @@
     .fgroup.wide .seg { width: 100%; }
     .fgroup.wide .seg button { flex: 1; }
   }
+  /* Підказка про керування під карткою */
+  .rv-help { position: relative; display: flex; justify-content: center; margin-top: 16px; }
+  .help-btn { all: unset; cursor: pointer; width: 28px; height: 28px; border-radius: 50%;
+              border: 1px solid var(--line); color: var(--muted); display: grid;
+              place-items: center; font-size: 14px; font-weight: 600; }
+  .help-btn:hover, .help-btn[aria-expanded="true"] { color: var(--accent); border-color: var(--accent); }
+  .help-tip { position: absolute; bottom: 38px; left: 50%; transform: translateX(-50%);
+              background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+              padding: 12px 16px; box-shadow: 0 12px 34px rgba(20, 10, 50, .22); z-index: 30;
+              display: grid; gap: 6px; font-size: 13px; color: var(--muted); white-space: nowrap; }
+  @media (max-width: 520px) { .help-tip { white-space: normal; width: min(84vw, 300px); } }
   /* Зірочка улюбленого */
   .star { all: unset; cursor: pointer; font-size: 18px; line-height: 1; padding: 0 2px;
           color: var(--muted); opacity: .55; transition: opacity .15s, color .15s; }
@@ -1421,8 +1432,55 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'ArrowLeft' && reviewActions.move) { e.preventDefault(); reviewActions.move(-1); }
   else if (e.key === 'ArrowRight' && reviewActions.move) { e.preventDefault(); reviewActions.move(1); }
   else if ((e.key === ' ' || e.key === 'Enter') && reviewActions.flip) { e.preventDefault(); reviewActions.flip(); }
-  else if (e.key === '1' && reviewActions.repeat) { e.preventDefault(); reviewActions.repeat(); }
-  else if (e.key === '2' && reviewActions.learned) { e.preventDefault(); reviewActions.learned(); }
+  else if (e.key === '1' && reviewActions.act) { e.preventDefault(); reviewActions.act(); }
+});
+
+/* Свайп на телефоні: гортає картки, як стрілки. Вертикальний рух лишаємо
+   прокрутці, а короткий дотик — кнопкам, тож реагуємо лише на виразний
+   горизонтальний жест. Слухаємо сам #review-stage: його вміст
+   перемальовується, а сам елемент лишається той самий. */
+(function enableSwipe() {
+  const stage = $('review-stage');
+  const MIN = 60;           // мінімальна довжина жесту, px
+  let x0 = 0, y0 = 0, tracking = false;
+  stage.addEventListener('touchstart', (e) => {
+    tracking = e.touches.length === 1;
+    if (tracking) { x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; }
+  }, {passive: true});
+  stage.addEventListener('touchend', (e) => {
+    if (!tracking || !reviewActions || !reviewActions.move) return;
+    tracking = false;
+    const dx = e.changedTouches[0].clientX - x0, dy = e.changedTouches[0].clientY - y0;
+    if (Math.abs(dx) < MIN || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+    reviewActions.move(dx < 0 ? 1 : -1);   // вліво — наступна, вправо — попередня
+  }, {passive: true});
+})();
+
+/* Підказка про керування. Раніше вона була рядком під карткою і щоразу
+   забирала місце; тепер це «?», який відкривається кліком — на телефоні
+   наведення немає, тому звичайний title не підійшов би. */
+function helpTip(browsing) {
+  const tip = h('div', {class: 'help-tip', hidden: true, role: 'tooltip'},
+    h('div', null, h('kbd', null, 'Space'), ' show answer'),
+    h('div', null, h('kbd', null, '1'), browsing ? ' back to study' : ' learned'),
+    h('div', null, h('kbd', null, '←'), h('kbd', null, '→'), ' flip through'),
+    h('div', null, 'Swipe left or right on a phone'));
+  const btn = h('button', {class: 'help-btn', type: 'button', 'aria-expanded': 'false',
+    'aria-label': 'How to use this page',
+    onclick: (e) => {
+      e.stopPropagation();
+      tip.hidden = !tip.hidden;
+      btn.setAttribute('aria-expanded', tip.hidden ? 'false' : 'true');
+    }}, '?');
+  return h('div', {class: 'rv-help'}, tip, btn);
+}
+// Один слухач на всю сторінку: клік будь-де ще закриває відкриту підказку
+document.addEventListener('click', () => {
+  for (const tip of document.querySelectorAll('.help-tip:not([hidden])')) {
+    tip.hidden = true;
+    const btn = tip.parentElement.querySelector('.help-btn');
+    if (btn) btn.setAttribute('aria-expanded', 'false');
+  }
 });
 
 loaders.review = async () => {
@@ -1499,13 +1557,6 @@ loaders.review = async () => {
     back.hidden = true;
 
     const move = (step) => { index += step; show(); };
-    // Повторювати ще — картка лишається в черзі й повертається в кінці кола.
-    const repeat = async () => {
-      reviewActions = null;
-      await api('/api/review/' + w.id, {body: {grade: 0}});
-      cards.push(...cards.splice(index, 1));
-      show();
-    };
     // Вивчив — картка зникає з повторень, але лишається у словнику.
     const learned = async () => {
       reviewActions = null;
@@ -1524,12 +1575,12 @@ loaders.review = async () => {
       h('button', {class: 'btn sm ' + extra, type: 'button', title, onclick: action}, label);
     const reveal = h('button', {class: 'btn primary', type: 'button', style: 'margin-top:20px',
       onclick: () => flip()}, 'Show answer');
-    const first = browsing ? relearn : repeat;
+    const act = browsing ? relearn : learned;   // єдина дія над карткою
     function flip() {
       back.hidden = false; reveal.hidden = true;
-      reviewActions = {repeat: first, learned: browsing ? null : learned, move};
+      reviewActions = {act, move};
     }
-    reviewActions = {flip, repeat: first, learned: browsing ? null : learned, move};
+    reviewActions = {flip, act, move};
 
     const nav = (step, label, title) => h('button', {class: 'btn sm', type: 'button', title,
       disabled: cards.length < 2, onclick: () => move(step)}, label);
@@ -1543,19 +1594,15 @@ loaders.review = async () => {
         nav(1, 'Next →', 'Next card, without grading')),
       h('div', {class: 'card'},
         h('div', {class: 'row rv-top'},
-          browsing ? corner('↩ Back to study', 'Return this word to the review rotation', relearn, '')
-                   : corner('↻ Repeat', 'Keep this word in the rotation', repeat, ''),
           h('div', {class: 'row'}, starButton(w), h('span', {class: 'chip lvl'}, w.level),
             h('span', {class: 'chip'}, w.category)),
-          browsing ? h('span') : corner('✓ Learned',
-            'Hide it from reviews — you can bring it back from the Learned collection', learned, 'ok')),
+          browsing ? corner('↩ Back to study', 'Return this word to the review rotation', relearn, '')
+                   : corner('✓ Learned',
+                       'Hide it from reviews — you can bring it back from the Learned collection',
+                       learned, 'ok')),
         h('div', {style: 'margin-top:14px'}, reviewFront(w, side)),
         reveal, back),
-      h('div', {class: 'hint'},
-        h('kbd', null, 'Space'), ' show answer · ',
-        h('kbd', null, '1'), browsing ? ' back to study · ' : ' repeat · ',
-        browsing ? null : h('kbd', null, '2'), browsing ? null : ' learned · ',
-        h('kbd', null, '←'), h('kbd', null, '→'), ' flip through'));
+      helpTip(browsing));
   }
   show();
 };

@@ -1,0 +1,25 @@
+{
+  "name": "English Coach",
+  "short_name": "Coach",
+  "description": "Vocabulary and grammar lessons built from your own material",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#faf8ff",
+  "theme_color": "#8b6fd4",
+  "lang": "en",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'%3E%3Crect width='192' height='192' rx='42' fill='%238b6fd4'/%3E%3Ctext x='96' y='132' font-family='Georgia,serif' font-size='110' font-weight='bold' fill='white' text-anchor='middle'%3EEC%3C/text%3E%3C/svg%3E",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='112' fill='%238b6fd4'/%3E%3Ctext x='256' y='352' font-family='Georgia,serif' font-size='295' font-weight='bold' fill='white' text-anchor='middle'%3EEC%3C/text%3E%3C/svg%3E",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

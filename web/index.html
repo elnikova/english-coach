@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#faf8ff">
+<link rel="manifest" href="/manifest.json">
 <title>English Coach</title>
 <style>
   :root {
@@ -304,6 +305,12 @@
   .collections .family { margin-bottom: 6px; }
   .coll-pick { margin-top: 8px; }
   .coll-pick select { width: 100%; font: inherit; padding: 6px; }
+  /* Смужка про роботу без ноутбука. Живе в основній частині, а не в
+     сайдбарі: на телефоні сайдбар згортається і підвал там не видно. */
+  #offline { margin: 0 24px; padding: 9px 14px; border-radius: 12px; font-size: 13.5px;
+             color: #a8701f; background: rgba(201, 138, 46, .1);
+             border: 1px solid rgba(201, 138, 46, .32); }
+  @media (max-width: 760px) { #offline { margin: 0 16px; } }
   /* Підказка про керування під карткою */
   .rv-help { position: relative; display: flex; justify-content: center; margin-top: 16px; }
   .help-btn { all: unset; cursor: pointer; width: 28px; height: 28px; border-radius: 50%;
@@ -379,6 +386,7 @@
 
 <main>
   <header class="topbar"><h1 id="view-title">Vocabulary</h1><span class="sub" id="view-sub"></span></header>
+  <div id="offline" role="status" hidden>Offline — showing the last saved copy</div>
   <div id="scroll">
 
   <!-- Upload -->
@@ -538,14 +546,64 @@ function h(tag, attrs, ...children) {
     if (child != null && child !== false && child !== '' && child !== 0) node.append(child);
   return node;
 }
+/* Зміни, зроблені без зв'язку з ноутбуком. Лежать у браузері телефона,
+   поки застосунок знову не відгукнеться, тоді надсилаються по черзі. */
+const QUEUE_KEY = 'coach-pending';
+let staleData = false;          // останні дані прийшли з кеша, не з ноутбука
+function pending() {
+  try { return JSON.parse(localStorage.getItem(QUEUE_KEY) || '[]'); } catch (e) { return []; }
+}
+function savePending(list) {
+  try { localStorage.setItem(QUEUE_KEY, JSON.stringify(list)); } catch (e) { /* приватний режим */ }
+}
+function queueChange(path, options) {
+  const list = pending();
+  list.push({path, method: options.method || 'POST', body: options.body || null});
+  savePending(list);
+  showOffline();
+}
+async function flushPending() {
+  const list = pending();
+  if (!list.length) return;
+  const left = [];
+  for (const item of list) {
+    try {
+      await fetch(item.path, {
+        method: item.method,
+        headers: item.body ? {'Content-Type': 'application/json'} : undefined,
+        body: item.body ? JSON.stringify(item.body) : undefined,
+      });
+    } catch (e) { left.push(item); }   // зв'язку досі немає — лишаємо на потім
+  }
+  savePending(left);
+  if (!left.length) showOffline();
+}
+
 async function api(path, options = {}) {
-  const res = await fetch(path, {
-    method: options.method || (options.body ? 'POST' : 'GET'),
-    headers: options.body ? {'Content-Type': 'application/json'} : undefined,
-    body: options.body ? JSON.stringify(options.body) : undefined,
-  });
+  const method = options.method || (options.body ? 'POST' : 'GET');
+  let res;
+  try {
+    res = await fetch(path, {
+      method,
+      headers: options.body ? {'Content-Type': 'application/json'} : undefined,
+      body: options.body ? JSON.stringify(options.body) : undefined,
+    });
+  } catch (error) {
+    // Читання без мережі перехоплює службовий воркер; сюди доходять лише зміни
+    if (method === 'GET') throw new Error('No connection to the app');
+    queueChange(path, {method, body: options.body});
+    return {ok: true, queued: true};
+  }
+  if (method === 'GET') {
+    // Воркер позначає знімки з кеша — за цим і бачимо, що ноутбука немає
+    staleData = res.headers.get('X-Coach-Cache') === '1';
+    showOffline();
+  }
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || res.statusText);
+  if (!res.ok) {
+    if (res.status === 503 && data.error === 'offline') throw new Error('Nothing saved for offline yet');
+    throw new Error(data.error || res.statusText);
+  }
   return data;
 }
 function showError(node, err) { node.textContent = 'Error: ' + err.message; node.hidden = false; }
@@ -1871,10 +1929,38 @@ $('chat-voice').addEventListener('change', (e) => {
   if (!e.target.checked && 'speechSynthesis' in window) speechSynthesis.cancel();
 });
 
+// ---------- Offline ----------
+function showOffline() {
+  const box = $('offline');
+  if (!box) return;
+  const waiting = pending().length;
+  const off = !navigator.onLine || staleData;
+  box.hidden = !off && !waiting;
+  box.textContent = off
+    ? (waiting ? `Offline — ${waiting} change${waiting > 1 ? 's' : ''} waiting to be saved`
+               : 'Offline — showing the last saved copy')
+    : `Reconnecting — ${waiting} change${waiting > 1 ? 's' : ''} to send`;
+}
+window.addEventListener('online', async () => { await flushPending(); showOffline(); refreshStats(); });
+window.addEventListener('offline', showOffline);
+
+/* Службовий воркер кешує сторінку й дані, щоб застосунок відкривався,
+   коли ноутбук вимкнений. Працює лише на https або на localhost —
+   на телефоні це адреса Tailscale. */
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => { /* http або приватний режим */ });
+  });
+}
+
 // ---------- Start ----------
 let first = 'materials';
 try { first = localStorage.getItem('view') || first; } catch (e) {}
-refreshStats().then(() => openView(loaders[first] ? first : 'materials'));
+showOffline();
+flushPending();
+refreshStats()
+  .catch(() => {})                       // без мережі стартуємо з кешу
+  .then(() => openView(loaders[first] ? first : 'materials'));
 </script>
 </body>
 </html>

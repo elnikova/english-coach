@@ -23,7 +23,12 @@ from coach.tutor import LEVELS, build_card, build_lesson, categories, detect_kin
 # 127.0.0.1 — лише цей комп'ютер. 0.0.0.0 — ще й інші ваші пристрої через Tailscale.
 HOST = (os.getenv("COACH_HOST") or "127.0.0.1").strip()
 PORT = int((os.getenv("COACH_PORT") or "8000").strip())
-PAGE = Path(__file__).parent / "web" / "index.html"
+WEB = Path(__file__).parent / "web"
+PAGE = WEB / "index.html"
+# Файли, які потрібні для роботи офлайн. Віддаємо їх із кореня, бо службовий
+# воркер керує лише тими сторінками, що лежать не глибше за нього.
+STATIC = {"/sw.js": "application/javascript; charset=utf-8",
+          "/manifest.json": "application/manifest+json; charset=utf-8"}
 MAX_BODY = 14 * 1024 * 1024  # приблизно 10 МБ файлів у base64
 MAX_FILES = 8
 # Поля картки, які можна правити вручну, і межа довжини кожного
@@ -320,6 +325,10 @@ class Handler(BaseHTTPRequestHandler):
         params = dict(p.split("=", 1) for p in raw_query.split("&") if "=" in p)
         if path in ("/", "/index.html"):
             return self._send(200, PAGE.read_bytes(), "text/html; charset=utf-8")
+        if path in STATIC:
+            file = WEB / path.lstrip("/")
+            if file.is_file():
+                return self._send(200, file.read_bytes(), STATIC[path])
         self._api(lambda: self._get(path, params))
 
     def do_POST(self):

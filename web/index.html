@@ -501,6 +501,10 @@
           <span class="label">Part of speech</span>
           <select id="rv-pos" aria-label="Part of speech to review"></select>
         </div>
+        <div class="fgroup">
+          <span class="label">Level</span>
+          <select id="rv-level" aria-label="Level to review"></select>
+        </div>
         <button class="btn" id="rv-shuffle" type="button" title="Shuffle the cards in this deck">⇄ Shuffle</button>
       </div>
     </div>
@@ -1557,7 +1561,7 @@ $('cat-add').addEventListener('submit', async (e) => {
 
 // ---------- Review ----------
 const SIDES = [['en', 'English'], ['uk', 'Ukrainian'], ['random', 'Random']];
-let reviewSide = 'en', reviewCollection = '', reviewPos = '', reviewActions = null;
+let reviewSide = 'en', reviewCollection = '', reviewPos = '', reviewLevel = '', reviewActions = null;
 try { reviewSide = localStorage.getItem('reviewSide') || 'en'; } catch (e) {}
 
 /** Перша сторона картки. */
@@ -1602,6 +1606,10 @@ $('rv-collection').addEventListener('change', (e) => {
 });
 $('rv-pos').addEventListener('change', (e) => {
   reviewPos = e.target.value;
+  loaders.review();
+});
+$('rv-level').addEventListener('change', (e) => {
+  reviewLevel = e.target.value;
   loaders.review();
 });
 // Клавіші: пробіл показує відповідь, 1-4 оцінюють, стрілки гортають
@@ -1699,12 +1707,19 @@ loaders.review = async () => {
   $('rv-pos').replaceChildren(h('option', {value: ''}, 'All'),
     ...POS_GROUPS.map(([key, label]) => h('option', {value: key}, label)));
   $('rv-pos').value = keepPos; reviewPos = keepPos;
+  const keepLevel = $('rv-level').value;
+  $('rv-level').replaceChildren(h('option', {value: ''}, 'All'),
+    ...(meta.levels || []).map((lvl) => h('option', {value: lvl}, lvl)));
+  $('rv-level').value = (meta.levels || []).includes(keepLevel) ? keepLevel : '';
+  reviewLevel = $('rv-level').value;
 
   let cards = [], index = 0, done = 0;
   const sides = new Map();  // щоб у режимі Random сторона не мінялась, коли гортаєш назад
   try {
     const path = '/api/review' + (reviewCollection ? '?collection=' + reviewCollection : '');
-    cards = (await api(path)).words.filter((w) => !reviewPos || posGroup(w) === reviewPos);
+    cards = (await api(path)).words
+      .filter((w) => !reviewPos || posGroup(w) === reviewPos)
+      .filter((w) => !reviewLevel || w.level === reviewLevel);
   } catch (err) { return stage.replaceChildren(h('div', {class: 'error'}, 'Error: ' + err.message)); }
   const total = cards.length;
   $('rv-shuffle').onclick = () => {
@@ -1738,7 +1753,7 @@ loaders.review = async () => {
           ? 'Tap the star on a card to collect the ones you want to come back to.'
           : special === 'learned'
             ? 'Cards you mark as learned appear here, and you can send them back to study.'
-            : (reviewCollection || reviewPos ? 'Nothing is due today with these filters.'
+            : (reviewCollection || reviewPos || reviewLevel ? 'Nothing is due today with these filters.'
                                              : 'Add words to your vocabulary and they will show up here.');
       return stage.replaceChildren(h('div', {class: 'card'},
         h('h3', null, title), h('p', {class: 'muted', style: 'margin:0'}, text)));
@@ -1782,7 +1797,8 @@ loaders.review = async () => {
         h('span', {class: 'muted small'},
           `Card ${index + 1} of ${cards.length}` + (done ? ` · ${done} done` : '') +
           (reviewCollection ? ` · ${$('rv-collection').selectedOptions[0].textContent}` : '') +
-          (reviewPos ? ` · ${posLabel(reviewPos)}` : '')),
+          (reviewPos ? ` · ${posLabel(reviewPos)}` : '') +
+          (reviewLevel ? ` · ${reviewLevel}` : '')),
         nav(1, 'Next →', 'Next card, without grading')),
       h('div', {class: 'card'},
         h('div', {class: 'row rv-top'},

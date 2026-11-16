@@ -259,6 +259,8 @@ def word_update(word_id, data):
         db.execute("UPDATE words SET note = ? WHERE id = ?", (str(data["note"])[:2000], word_id))
     if "learned" in data:
         db.set_learned(word_id, bool(data["learned"]))
+    if "favorite" in data:
+        db.set_favorite(word_id, bool(data["favorite"]))
     return {"ok": True}
 
 
@@ -277,6 +279,8 @@ def stats(_=None):
         "words": db.query("SELECT COUNT(*) AS n FROM words")[0]["n"],
         "materials": db.query("SELECT COUNT(*) AS n FROM materials")[0]["n"],
         "due": len(db.due_words()),
+        "favorites": db.query("SELECT COUNT(*) AS n FROM words WHERE favorite = 1 AND learned = 0")[0]["n"],
+        "learned": db.query("SELECT COUNT(*) AS n FROM words WHERE learned = 1")[0]["n"],
         "categories": categories(),
         "collections": db.list_collections(),
         "levels": LEVELS,
@@ -320,8 +324,13 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/words":
             return {"words": db.list_words()}
         if path == "/api/review":
-            collection = params.get("collection")
-            return {"words": db.due_words(int(collection) if (collection or "").isdigit() else None)}
+            # collection — це або id колекції, або добірка: favorites / learned
+            scope = params.get("collection") or ""
+            if scope == "favorites":
+                return {"words": db.favorite_words()}
+            if scope == "learned":
+                return {"words": db.learned_words()}
+            return {"words": db.due_words(int(scope) if scope.isdigit() else None)}
         if path == "/api/quiz":
             return quiz(params)
         raise ApiError(404, "Not found")

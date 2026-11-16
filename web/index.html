@@ -276,6 +276,25 @@
   .stage .card { padding: 34px 28px; }
   .stage .term { font-size: 32px; }
   .answer { text-align: left; margin-top: 20px; border-top: 1px solid var(--line); padding-top: 16px; }
+  /* Фільтри повторення: напис і його селект тримаються купи при будь-якій ширині */
+  .rv-filters { gap: 14px 18px; }
+  .fgroup { display: flex; align-items: center; gap: 8px; flex: 0 1 auto; min-width: 0; }
+  .fgroup .label { margin: 0; white-space: nowrap; }
+  .fgroup select { min-width: 0; }
+  @media (max-width: 760px) {
+    .fgroup { flex: 1 1 100%; }
+    .fgroup select { flex: 1; }
+    /* перемикач сторони ширший за рядок — напис над ним, кнопки на всю ширину */
+    .fgroup.wide { flex-direction: column; align-items: stretch; gap: 6px; }
+    .fgroup.wide .seg { width: 100%; }
+    .fgroup.wide .seg button { flex: 1; }
+  }
+  /* Зірочка улюбленого */
+  .star { all: unset; cursor: pointer; font-size: 18px; line-height: 1; padding: 0 2px;
+          color: var(--muted); opacity: .55; transition: opacity .15s, color .15s; }
+  .star:hover { opacity: 1; }
+  .star.on { color: #e8b339; opacity: 1; }
+  .word > summary .star { margin-left: 2px; }
   /* Дві кнопки у верхніх кутах картки повторення */
   .rv-top { justify-content: space-between; align-items: flex-start; gap: 10px; }
   .rv-top .btn { white-space: nowrap; }
@@ -435,13 +454,20 @@
   <!-- Review -->
   <section class="view" id="review">
     <div class="card" style="margin-bottom:18px">
-      <div class="row">
-        <span class="label" style="margin:0">Show first</span>
-        <div class="seg" id="rv-side" role="group" aria-label="Which side to show first"></div>
-        <span class="label" style="margin:0 0 0 12px">Collection</span>
-        <select id="rv-collection" aria-label="Collection to review"></select>
-        <span class="label" style="margin:0 0 0 12px">Part of speech</span>
-        <select id="rv-pos" aria-label="Part of speech to review"></select>
+      <div class="row rv-filters">
+        <div class="fgroup wide">
+          <span class="label">Show first</span>
+          <div class="seg" id="rv-side" role="group" aria-label="Which side to show first"></div>
+        </div>
+        <div class="fgroup">
+          <span class="label">Collection</span>
+          <select id="rv-collection" aria-label="Collection to review"></select>
+        </div>
+        <div class="fgroup">
+          <span class="label">Part of speech</span>
+          <select id="rv-pos" aria-label="Part of speech to review"></select>
+        </div>
+        <button class="btn" id="rv-shuffle" type="button" title="Shuffle the cards in this deck">⇄ Shuffle</button>
       </div>
     </div>
     <div class="stage" id="review-stage"></div>
@@ -536,6 +562,30 @@ function speak(text, button) {
   } else {
     say();
   }
+}
+/* Зірочка «улюблене». Стан міняємо прямо на об'єкті слова, щоб не
+   перемальовувати весь список через один клік. */
+function starButton(w, after) {
+  const label = () => (w.favorite ? '★' : '☆');
+  const hint = () => (w.favorite ? 'Remove from favourites' : 'Add to favourites');
+  const btn = h('button', {class: 'star' + (w.favorite ? ' on' : ''), type: 'button',
+    title: hint(), 'aria-label': 'Favourite', 'aria-pressed': w.favorite ? 'true' : 'false',
+    onclick: async (e) => {
+      e.stopPropagation(); e.preventDefault();
+      const next = w.favorite ? 0 : 1;
+      btn.disabled = true;
+      try {
+        await api('/api/words/' + w.id, {body: {favorite: !!next}});
+        w.favorite = next;
+        btn.textContent = label(); btn.title = hint();
+        btn.classList.toggle('on', !!next);
+        btn.setAttribute('aria-pressed', next ? 'true' : 'false');
+        refreshStats();
+        if (after) after();
+      } catch (err) { /* лишаємо як було */ }
+      btn.disabled = false;
+    }}, label());
+  return btn;
 }
 function speakButton(text) {
   return h('button', {class: 'speak', type: 'button', title: 'Pronunciation', 'aria-label': 'Play pronunciation',
@@ -1066,7 +1116,7 @@ function wordCard(w) {
     h('summary', null, h('span', {class: 'term'}, w.term),
       w.learned && h('span', {class: 'chip done', title: 'Learned: not shown in reviews'}, 'learned'),
       partial && h('span', {class: 'chip partial', title: 'Short card: no examples yet'}, 'short'),
-      speakButton(w.term)),
+      starButton(w), speakButton(w.term)),
     h('div', {class: 'body'},
       h('div', {class: 'meta'},
         h('div', null, h('span', {class: 'ipa'}, w.transcription), ' ', h('span', {class: 'pos'}, w.part_of_speech)),
@@ -1383,11 +1433,18 @@ loaders.review = async () => {
     try { localStorage.setItem('reviewSide', value); } catch (err) {}
     loaders.review();
   });
+  // Окрім звичайних колекцій, у списку дві добірки: улюблене і вивчене
   const keep = $('rv-collection').value;
-  $('rv-collection').replaceChildren(h('option', {value: ''}, 'All words'),
+  $('rv-collection').replaceChildren(
+    h('option', {value: ''}, 'All words'),
+    h('option', {value: 'favorites'}, `★ Favourites (${meta.favorites || 0})`),
+    h('option', {value: 'learned'}, `✓ Learned (${meta.learned || 0})`),
     ...(meta.collections || []).map((c) => h('option', {value: String(c.id)}, `${c.name} (${c.words})`)));
-  $('rv-collection').value = (meta.collections || []).some((c) => String(c.id) === keep) ? keep : '';
+  const known = keep === 'favorites' || keep === 'learned'
+             || (meta.collections || []).some((c) => String(c.id) === keep);
+  $('rv-collection').value = known ? keep : '';
   reviewCollection = $('rv-collection').value;
+  const browsing = reviewCollection === 'learned';   // вивчене не оцінюємо, лише повертаємо в навчання
   const keepPos = $('rv-pos').value;
   $('rv-pos').replaceChildren(h('option', {value: ''}, 'All'),
     ...POS_GROUPS.map(([key, label]) => h('option', {value: key}, label)));
@@ -1400,6 +1457,14 @@ loaders.review = async () => {
     cards = (await api(path)).words.filter((w) => !reviewPos || posGroup(w) === reviewPos);
   } catch (err) { return stage.replaceChildren(h('div', {class: 'error'}, 'Error: ' + err.message)); }
   const total = cards.length;
+  $('rv-shuffle').onclick = () => {
+    for (let i = cards.length - 1; i > 0; i--) {     // Фішер–Єйтс
+      const j = Math.floor(Math.random() * (i + 1));
+      [cards[i], cards[j]] = [cards[j], cards[i]];
+    }
+    index = 0; show();
+  };
+  $('rv-shuffle').disabled = cards.length < 2;
 
   const sideFor = (w) => {
     if (reviewSide !== 'random') return reviewSide;
@@ -1411,11 +1476,22 @@ loaders.review = async () => {
     refreshStats();
     if (!cards.length) {
       reviewActions = null;
+      const special = reviewCollection === 'favorites' ? 'favourites'
+                    : reviewCollection === 'learned' ? 'learned' : '';
+      const title = total ? (browsing ? 'All of them are back in study' : 'All done!')
+                          : special === 'favourites' ? 'No favourites yet'
+                          : special === 'learned' ? 'Nothing learned yet'
+                          : 'Nothing to review';
+      const text = total
+        ? `Cards: ${done}.` + (browsing ? '' : special ? '' : ' Come back tomorrow.')
+        : special === 'favourites'
+          ? 'Tap the star on a card to collect the ones you want to come back to.'
+          : special === 'learned'
+            ? 'Cards you mark as learned appear here, and you can send them back to study.'
+            : (reviewCollection || reviewPos ? 'Nothing is due today with these filters.'
+                                             : 'Add words to your vocabulary and they will show up here.');
       return stage.replaceChildren(h('div', {class: 'card'},
-        h('h3', null, total ? 'All done for today!' : 'Nothing to review'),
-        h('p', {class: 'muted', style: 'margin:0'}, total ? `Cards reviewed: ${done}. Come back tomorrow.`
-          : (reviewCollection || reviewPos ? 'Nothing is due today with these filters.'
-                                           : 'Add words to your vocabulary and they will show up here.'))));
+        h('h3', null, title), h('p', {class: 'muted', style: 'margin:0'}, text)));
     }
     index = (index % cards.length + cards.length) % cards.length;
     const w = cards[index], side = sideFor(w);
@@ -1437,15 +1513,23 @@ loaders.review = async () => {
       cards.splice(index, 1); done++;
       show();
     };
+    // У добірці Learned навпаки: повертаємо слово до повторень.
+    const relearn = async () => {
+      reviewActions = null;
+      await api('/api/words/' + w.id, {body: {learned: false}});
+      cards.splice(index, 1); done++;
+      show();
+    };
     const corner = (label, title, action, extra) =>
       h('button', {class: 'btn sm ' + extra, type: 'button', title, onclick: action}, label);
     const reveal = h('button', {class: 'btn primary', type: 'button', style: 'margin-top:20px',
       onclick: () => flip()}, 'Show answer');
+    const first = browsing ? relearn : repeat;
     function flip() {
       back.hidden = false; reveal.hidden = true;
-      reviewActions = {repeat, learned, move};
+      reviewActions = {repeat: first, learned: browsing ? null : learned, move};
     }
-    reviewActions = {flip, repeat, learned, move};
+    reviewActions = {flip, repeat: first, learned: browsing ? null : learned, move};
 
     const nav = (step, label, title) => h('button', {class: 'btn sm', type: 'button', title,
       disabled: cards.length < 2, onclick: () => move(step)}, label);
@@ -1459,15 +1543,18 @@ loaders.review = async () => {
         nav(1, 'Next →', 'Next card, without grading')),
       h('div', {class: 'card'},
         h('div', {class: 'row rv-top'},
-          corner('↻ Repeat', 'Keep this word in the rotation', repeat, ''),
-          h('div', {class: 'row'}, h('span', {class: 'chip lvl'}, w.level), h('span', {class: 'chip'}, w.category)),
-          corner('✓ Learned', 'Hide it from reviews — you can bring it back from the vocabulary',
-                 learned, 'ok')),
+          browsing ? corner('↩ Back to study', 'Return this word to the review rotation', relearn, '')
+                   : corner('↻ Repeat', 'Keep this word in the rotation', repeat, ''),
+          h('div', {class: 'row'}, starButton(w), h('span', {class: 'chip lvl'}, w.level),
+            h('span', {class: 'chip'}, w.category)),
+          browsing ? h('span') : corner('✓ Learned',
+            'Hide it from reviews — you can bring it back from the Learned collection', learned, 'ok')),
         h('div', {style: 'margin-top:14px'}, reviewFront(w, side)),
         reveal, back),
       h('div', {class: 'hint'},
         h('kbd', null, 'Space'), ' show answer · ',
-        h('kbd', null, '1'), ' repeat · ', h('kbd', null, '2'), ' learned · ',
+        h('kbd', null, '1'), browsing ? ' back to study · ' : ' repeat · ',
+        browsing ? null : h('kbd', null, '2'), browsing ? null : ' learned · ',
         h('kbd', null, '←'), h('kbd', null, '→'), ' flip through'));
   }
   show();

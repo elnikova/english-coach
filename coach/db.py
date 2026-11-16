@@ -58,6 +58,7 @@ CREATE TABLE IF NOT EXISTS words (
     note TEXT DEFAULT '',               -- власна нотатка до слова
     material_id INTEGER,
     learned INTEGER DEFAULT 0,          -- 1 = вивчено: картка не показується в повтореннях
+    favorite INTEGER DEFAULT 0,         -- 1 = улюблене: окрема добірка в повтореннях
     reps INTEGER DEFAULT 0,             -- скільки разів поспіль згадано
     interval_days REAL DEFAULT 0,
     ease REAL DEFAULT 2.5,
@@ -90,6 +91,8 @@ def init() -> None:
             conn.execute("ALTER TABLE words ADD COLUMN synonyms TEXT DEFAULT '[]'")
         if "learned" not in columns:
             conn.execute("ALTER TABLE words ADD COLUMN learned INTEGER DEFAULT 0")
+        if "favorite" not in columns:
+            conn.execute("ALTER TABLE words ADD COLUMN favorite INTEGER DEFAULT 0")
         material_columns = {row["name"] for row in conn.execute("PRAGMA table_info(materials)")}
         if "notes" not in material_columns:
             conn.execute("ALTER TABLE materials ADD COLUMN notes TEXT DEFAULT ''")
@@ -390,6 +393,27 @@ def due_words(collection_id: int | None = None) -> list[dict]:
     else:
         rows = query("SELECT * FROM words WHERE learned = 0 AND due <= ? ORDER BY due, id", (today,))
     return _with_collections([_word(r) for r in rows])
+
+
+def favorite_words() -> list[dict]:
+    """Улюблені картки. Дату повторення не враховуємо: це добірка, яку
+    гортають тоді, коли захочеться, а не черга на сьогодні."""
+    rows = query("SELECT * FROM words WHERE favorite = 1 AND learned = 0"
+                 " ORDER BY term COLLATE NOCASE")
+    return _with_collections([_word(r) for r in rows])
+
+
+def learned_words() -> list[dict]:
+    """Вивчені слова — щоб переглянути й за потреби повернути до повторень."""
+    rows = query("SELECT * FROM words WHERE learned = 1 ORDER BY term COLLATE NOCASE")
+    return _with_collections([_word(r) for r in rows])
+
+
+def set_favorite(word_id: int, favorite: bool) -> bool:
+    if not query("SELECT 1 FROM words WHERE id = ?", (word_id,)):
+        return False
+    execute("UPDATE words SET favorite = ? WHERE id = ?", (1 if favorite else 0, word_id))
+    return True
 
 
 def set_learned(word_id: int, learned: bool) -> bool:

@@ -26,6 +26,9 @@ PORT = int((os.getenv("COACH_PORT") or "8000").strip())
 PAGE = Path(__file__).parent / "web" / "index.html"
 MAX_BODY = 14 * 1024 * 1024  # приблизно 10 МБ файлів у base64
 MAX_FILES = 8
+# Поля картки, які можна правити вручну, і межа довжини кожного
+WORD_TEXT_FIELDS = {"transcription": 120, "part_of_speech": 60, "forms": 300,
+                    "translation": 600, "definition": 600}
 
 coach: EnglishCoach | None = None
 chat_lock = threading.Lock()
@@ -271,7 +274,13 @@ def word_update(word_id, data):
         db.set_learned(word_id, bool(data["learned"]))
     if "favorite" in data:
         db.set_favorite(word_id, bool(data["favorite"]))
-    return {"ok": True}
+    for field, limit in WORD_TEXT_FIELDS.items():
+        if field in data:
+            db.execute(f"UPDATE words SET {field} = ? WHERE id = ?",
+                       (str(data[field]).strip()[:limit], word_id))
+    # Віддаємо оновлене слово, щоб сторінка перемалювала саму картку,
+    # а не перезавантажувала весь словник і не стрибала на неї.
+    return {"ok": True, "word": db.get_word(word_id)}
 
 
 def review_grade(word_id, data):

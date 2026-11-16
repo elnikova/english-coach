@@ -395,6 +395,11 @@ def due_words(collection_id: int | None = None) -> list[dict]:
     return _with_collections([_word(r) for r in rows])
 
 
+def get_word(word_id: int) -> dict | None:
+    rows = query("SELECT * FROM words WHERE id = ?", (word_id,))
+    return _with_collections([_word(rows[0])])[0] if rows else None
+
+
 def favorite_words() -> list[dict]:
     """Улюблені картки. Дату повторення не враховуємо: це добірка, яку
     гортають тоді, коли захочеться, а не черга на сьогодні."""

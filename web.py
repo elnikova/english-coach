@@ -250,22 +250,17 @@ def word_create(data):
     return {"ok": True, "term": item["term"], "existed": False, "added": add_related_words(item)}
 
 
-EDITABLE = ("term", "transcription", "part_of_speech", "forms", "translation", "definition")
-
-
 def word_update(word_id, data):
-    for field in EDITABLE:
-        if field not in data:
-            continue
-        value = str(data[field]).strip()[:600]
-        if field == "term":
-            if not value:
-                raise ApiError(400, "The word cannot be empty")
-            other = db.find_word(value)
-            if other and other["id"] != word_id:
-                raise ApiError(409, f"“{other['term']}” is already in your vocabulary")
-        # Назва поля береться лише зі списку вище, тож підставляти її безпечно
-        db.execute(f"UPDATE words SET {field} = ? WHERE id = ?", (value, word_id))
+    # Саме слово можна перейменувати: від нього залежить і пошук, і буква,
+    # під якою картка стоїть у словнику. Решту полів не чіпаємо.
+    if "term" in data:
+        term = str(data["term"]).strip()[:300]
+        if not term:
+            raise ApiError(400, "The word cannot be empty")
+        other = db.find_word(term)
+        if other and other["id"] != word_id:
+            raise ApiError(409, f"“{other['term']}” is already in your vocabulary")
+        db.execute("UPDATE words SET term = ? WHERE id = ?", (term, word_id))
     if data.get("category") in categories():
         db.execute("UPDATE words SET category = ? WHERE id = ?", (data["category"], word_id))
     if data.get("level") in LEVELS:

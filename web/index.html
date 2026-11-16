@@ -289,13 +289,17 @@
     .fgroup.wide .seg { width: 100%; }
     .fgroup.wide .seg button { flex: 1; }
   }
-  /* Форма правки картки у словнику */
-  .editbox { margin: 2px 0 4px; }
-  .egrid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
-  .efield { display: grid; gap: 5px; min-width: 0; }
-  .efield .label { margin: 0; }
-  .efield input, .efield textarea { width: 100%; box-sizing: border-box; }
-  .efield textarea { resize: vertical; }
+  /* Перейменування слова просто в заголовку картки */
+  .pencil { all: unset; cursor: pointer; font-size: 15px; line-height: 1; padding: 2px 4px;
+            border-radius: 8px; color: var(--muted); opacity: 0; transition: opacity .15s, color .15s; }
+  .word > summary:hover .pencil, .word[open] > summary .pencil, .pencil:focus-visible { opacity: .6; }
+  .pencil:hover { opacity: 1; color: var(--accent); background: var(--side); }
+  .pencil.ok { color: var(--ok); }
+  .pencil[hidden] { display: none; }
+  .term-edit { font-size: 17px; font-weight: 650; padding: 4px 10px; border-radius: 10px;
+               border: 1px solid var(--accent); background: var(--bg); color: var(--text);
+               flex: 1; min-width: 0; max-width: 420px; }
+  @media (hover: none) { .word > summary .pencil { opacity: .6; } }
   /* Підказка про керування під карткою */
   .rv-help { position: relative; display: flex; justify-content: center; margin-top: 16px; }
   .help-btn { all: unset; cursor: pointer; width: 28px; height: 28px; border-radius: 50%;
@@ -525,7 +529,9 @@ function h(tag, attrs, ...children) {
     else if (value === true) node.setAttribute(key, '');
     else if (value !== false && value != null) node.setAttribute(key, value);
   }
-  for (const child of children.flat()) if (child != null && child !== false && child !== '') node.append(child);
+  // 0 теж відкидаємо: він приходить з виразів на кшталт w.learned && h(...)
+  for (const child of children.flat())
+    if (child != null && child !== false && child !== '' && child !== 0) node.append(child);
   return node;
 }
 async function api(path, options = {}) {
@@ -1113,43 +1119,47 @@ function enrichBlock(w) {
   }}, partial ? '+ Complete this card' : '+ Find word family and synonyms');
   return h('div', {class: 'row', style: 'margin-top:14px'}, btn, status);
 }
-/* Правка картки. Агент інколи дає не той відтінок перекладу чи неточну
-   транскрипцію — ці поля має сенс міняти руками. Приклади редагуються
-   окремо: зайвий можна прибрати, а свій додати. */
-function editForm(w, view, toggle) {
-  const err = h('div', {class: 'error', hidden: true});
-  const field = (key, label, long) => {
-    const input = long ? h('textarea', {rows: 2, 'aria-label': label})
-                       : h('input', {type: 'text', 'aria-label': label});
-    input.value = w[key] || '';
-    return {key, input, node: h('label', {class: 'efield'}, h('span', {class: 'label'}, label), input)};
+/* Правка самого слова просто в заголовку картки: від написання залежить,
+   під якою буквою картка стоїть у словнику, тож "a bit" інколи треба
+   зробити просто "bit". Решта полів не редагується. */
+function termEditor(w) {
+  const view = h('span', {class: 'term'}, w.term);
+  const input = h('input', {class: 'term-edit', type: 'text', hidden: true, 'aria-label': 'Word or phrase'});
+  const close = () => {
+    input.hidden = true; ok.hidden = true; no.hidden = true;
+    view.hidden = false; pencil.hidden = false;
   };
-  const fields = [
-    field('term', 'Word or phrase'),
-    field('transcription', 'Transcription'),
-    field('part_of_speech', 'Part of speech'),
-    field('forms', 'Forms'),
-    field('translation', 'Translation', true),
-    field('definition', 'Definition in English', true),
-  ];
-  const save = h('button', {class: 'btn primary sm', type: 'button', onclick: async () => {
-    const body = {};
-    fields.forEach((f) => { body[f.key] = f.input.value.trim(); });
-    if (!body.term) return showError(err, new Error('the word cannot be empty'));
-    save.disabled = true;
+  const open = () => {
+    input.value = w.term;
+    view.hidden = true; pencil.hidden = true;
+    input.hidden = false; ok.hidden = false; no.hidden = false;
+    input.focus(); input.select();
+  };
+  const save = async () => {
+    const term = input.value.trim();
+    if (!term || term === w.term) return close();
+    ok.disabled = true;
     try {
-      await api('/api/words/' + w.id, {body});
+      await api('/api/words/' + w.id, {body: {term}});
       await loaders.words();
-      revealWord(body.term);          // список міг перебудуватися, тож знаходимо картку заново
-    } catch (e) { save.disabled = false; showError(err, e); }
-  }}, 'Save');
-  const cancel = h('button', {class: 'btn link sm', type: 'button', onclick: () => {
-    fields.forEach((f) => { f.input.value = w[f.key] || ''; });
-    err.hidden = true; toggle(false);
-  }}, 'Cancel');
-  return h('div', {class: 'editbox', hidden: true},
-    h('div', {class: 'egrid'}, fields.map((f) => f.node)),
-    err, h('div', {class: 'row', style: 'margin-top:12px'}, save, cancel));
+      revealWord(term);          // буква могла змінитися — знаходимо картку на новому місці
+    } catch (e) { ok.disabled = false; showError($('w-error'), e); close(); }
+  };
+  // Усередині <summary> клік відкриває картку, тож кожну дію гасимо вручну
+  const quiet = (fn) => (e) => { e.stopPropagation(); e.preventDefault(); fn(); };
+  const pencil = h('button', {class: 'pencil edit', type: 'button', title: 'Rename this word',
+    'aria-label': 'Rename', onclick: quiet(open)}, '✎');
+  const ok = h('button', {class: 'pencil ok', type: 'button', hidden: true,
+    title: 'Save', 'aria-label': 'Save', onclick: quiet(save)}, '✓');
+  const no = h('button', {class: 'pencil', type: 'button', hidden: true,
+    title: 'Cancel', 'aria-label': 'Cancel', onclick: quiet(close)}, '✕');
+  input.addEventListener('click', (e) => e.stopPropagation());
+  input.addEventListener('keydown', (e) => {
+    e.stopPropagation();
+    if (e.key === 'Enter') { e.preventDefault(); save(); }
+    if (e.key === 'Escape') { e.preventDefault(); close(); }
+  });
+  return [view, input, ok, no, pencil];
 }
 
 function wordCard(w) {
@@ -1169,24 +1179,18 @@ function wordCard(w) {
         await refreshStats(); await loaders.words();
       } catch (err) { learnedToggle.disabled = false; showError($('w-error'), err); }
     }}, w.learned ? 'Back to study' : 'Mark as learned');
-  const view = h('div', null,
-    h('div', null, h('span', {class: 'ipa'}, w.transcription), ' ', h('span', {class: 'pos'}, w.part_of_speech)),
-    h('div', {class: 'translation'}, w.translation),
-    w.forms && h('div', {class: 'ipa', style: 'margin-top:6px'}, 'Forms: ', w.forms),
-    w.definition && h('p', {class: 'muted', style: 'margin-top:10px'}, w.definition));
-  const toggle = (on) => { view.hidden = on; form.hidden = !on; editBtn.textContent = on ? 'Editing…' : 'Edit'; };
-  const form = editForm(w, view, toggle);
-  const editBtn = h('button', {class: 'btn link sm', type: 'button',
-    title: 'Change the transcription, translation, forms or the word itself',
-    onclick: () => toggle(form.hidden)}, 'Edit');
   return h('details', {class: 'card word', 'data-term': w.term.toLowerCase()},
-    h('summary', null, h('span', {class: 'term'}, w.term),
-      w.learned && h('span', {class: 'chip done', title: 'Learned: not shown in reviews'}, 'learned'),
+    h('summary', null, termEditor(w),
+      // w.learned приходить числом: 0 && … дає 0, і нуль осідав у заголовку як текст
+      w.learned ? h('span', {class: 'chip done', title: 'Learned: not shown in reviews'}, 'learned') : null,
       partial && h('span', {class: 'chip partial', title: 'Short card: no examples yet'}, 'short'),
       starButton(w), speakButton(w.term)),
     h('div', {class: 'body'},
       h('div', {class: 'meta'},
-        view, form,
+        h('div', null, h('span', {class: 'ipa'}, w.transcription), ' ', h('span', {class: 'pos'}, w.part_of_speech)),
+        h('div', {class: 'translation'}, w.translation),
+        w.forms && h('div', {class: 'ipa', style: 'margin-top:6px'}, 'Forms: ', w.forms),
+        w.definition && h('p', {class: 'muted', style: 'margin-top:10px'}, w.definition),
         relatedBlock(w, 'family', 'Word family'),
         relatedBlock(w, 'synonyms', 'Synonyms'),
         enrichBlock(w),
@@ -1194,7 +1198,7 @@ function wordCard(w) {
         noteBox(w),
         h('div', {class: 'row', style: 'margin-top:16px'},
           pick(meta.categories, w.category, 'category'), pick(meta.levels, w.level, 'level'),
-          editBtn, learnedToggle,
+          learnedToggle,
           h('button', {class: 'btn danger sm', type: 'button', onclick: async () => {
             if (!confirm(`Delete “${w.term}” from your vocabulary?`)) return;
             await api('/api/words/' + w.id, {method: 'DELETE'}); loaders.words();

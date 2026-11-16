@@ -1503,6 +1503,19 @@ loaders.review = async () => {
   $('rv-collection').value = known ? keep : '';
   reviewCollection = $('rv-collection').value;
   const browsing = reviewCollection === 'learned';   // вивчене не оцінюємо, лише повертаємо в навчання
+
+  // Старий запущений сервер не знає цих добірок і мовчки віддає всі слова.
+  // Краще сказати прямо, ніж показати не ту колоду.
+  if (meta.favorites === undefined && (reviewCollection === 'favorites' || browsing)) {
+    reviewActions = null;
+    return stage.replaceChildren(h('div', {class: 'card'},
+      h('h3', null, 'Restart the app'),
+      h('p', {class: 'muted', style: 'margin:0'},
+        'Favourites and Learned need the newer server code, but the running server is older.'),
+      h('p', {class: 'muted', style: 'margin:6px 0 0'},
+        'Press ', h('kbd', null, 'Ctrl'), ' + ', h('kbd', null, 'C'),
+        ' in the terminal running python web.py, then start it again.')));
+  }
   const keepPos = $('rv-pos').value;
   $('rv-pos').replaceChildren(h('option', {value: ''}, 'All'),
     ...POS_GROUPS.map(([key, label]) => h('option', {value: key}, label)));
